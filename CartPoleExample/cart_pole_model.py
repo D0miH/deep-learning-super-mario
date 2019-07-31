@@ -30,9 +30,11 @@ class PolicyNet(nn.Module):
         # set the discount factor and the batch_size
         self.gamma = gamma
 
-        self.fc1 = nn.Linear(4, 32)
-        self.fc2 = nn.Linear(32, 36)
-        self.fc3 = nn.Linear(36, 2)  # one value for left or right
+        self.fc1 = nn.Linear(4, 64)
+        self.dropout1 = nn.Dropout(0.6)
+        self.fc2 = nn.Linear(64, 32)
+        self.dropout2 = nn.Dropout(0.3)
+        self.fc3 = nn.Linear(32, 2)  # one value for left or right
 
         self.optimizer = optimizer(self.parameters(), lr=learning_rate)
 
@@ -42,9 +44,61 @@ class PolicyNet(nn.Module):
 
     def forward(self, x):
         x = F.relu(self.fc1(x))
+        x = self.dropout1(x)
         x = F.relu(self.fc2(x))
+        x = self.dropout2(x)
         x = F.softmax(self.fc3(x), dim=-1)  # get the probability for left or right
         return x
+
+    def play_episode_batch(self, batch_size=5, render=False):
+        for batch_episode in range(batch_size):
+            # play one episode
+            self.play_episode(render=render)
+
+            # insert a zero to the reward history to mark the end of an episode
+            self.reward_history.append(0)
+
+    def train_on_played_episode_batch(self):
+        # discount the rewards
+        cumulative_reward = 0
+        for i in reversed(range(self.steps)):
+            if self.reward_history[i] == 0:
+                # reset the cumulative reward at the end of an episode
+                cumulative_reward = 0
+            else:
+                cumulative_reward = cumulative_reward * self.gamma + self.reward_history[i]
+                self.reward_history[i] = cumulative_reward
+
+        # Normalize rewards
+        reward_mean = np.mean(self.reward_history)
+        reward_std = np.std(self.reward_history)
+        self.reward_history = (self.reward_history - reward_mean) / reward_std
+
+        # reset the gradients
+        self.optimizer.zero_grad()
+        # calculate the loss for each step
+        for step in range(self.steps):
+            # get the state at the step
+            state = self.state_history[step]
+            # get the action at the step
+            action = torch.FloatTensor([self.action_history[step]])
+            # get the reward at the step
+            reward = self.reward_history[step]
+
+            action_probs = self.forward(state)
+            action_prob_dist = Categorical(action_probs)
+            # for minimizing the loss we take the negative of the log policy function (this is the policy gradient)
+            loss = -action_prob_dist.log_prob(action) * reward
+            loss.backward()
+
+        # update the weights
+        self.optimizer.step()
+
+        # reset the histories and the number of steps
+        self.state_history = []
+        self.action_history = []
+        self.reward_history = []
+        self.steps = 0
 
     def play_episode(self, render=False):
         # reset the environment after playing one episode
@@ -60,6 +114,10 @@ class PolicyNet(nn.Module):
 
             next_state, reward, done, _ = self.env.step(action)
 
+            if done:
+                self.episode_durations.append(timeStep + 1)
+                break
+
             if render:
                 self.env.render(mode='rgb_array')
 
@@ -71,10 +129,6 @@ class PolicyNet(nn.Module):
             state = torch.from_numpy(state).float()
 
             self.steps += 1
-
-            if done:
-                self.episode_durations.append(timeStep + 1)
-                break
 
     def train_on_played_episode(self):
         # discount the rewards
