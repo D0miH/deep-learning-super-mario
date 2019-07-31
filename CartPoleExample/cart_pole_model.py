@@ -27,7 +27,7 @@ class PolicyNet(nn.Module):
         self.env.seed(42)
         torch.manual_seed(42)
 
-        # set the discount factor and the batch_size
+        # set the discount factor
         self.gamma = gamma
 
         self.fc1 = nn.Linear(4, 64)
