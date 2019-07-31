@@ -23,10 +23,9 @@ class PolicyNet(nn.Module):
 
         # create the environment
         self.env = gym.make('CartPole-v0')
-        # set the max steps to 500
-        self.env._max_expisode_steps = 500
         # set a seed for reproducibility
         self.env.seed(1)
+        torch.manual_seed(1)
 
         # set the discount factor and the batch_size
         self.gamma = gamma
