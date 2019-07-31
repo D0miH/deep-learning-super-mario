@@ -49,6 +49,9 @@ class MarioNet(nn.Module):
 
         self.optimizer = optimizer(self.parameters(), lr=learning_rate)
 
+        self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        self.to(self.device)
+
     def __del__(self):
         self.env.close()
 
@@ -86,13 +89,15 @@ class MarioNet(nn.Module):
         # while we are not done keep iterating
         for _ in count():
             # choose the next action
-            state = torch.stack(img_list).unsqueeze(0)
+            state = torch.stack(img_list).unsqueeze(0).to(self.device)
             action_probs = self.forward(state)
             action_probs_dist = Categorical(action_probs)
             action = action_probs_dist.sample().item()
 
             # take the action
             next_image, reward, done, info = self.env.step(action)
+            reward = torch.tensor([reward], device=self.device)
+
 
             # append the current x position to the list
             current_x_pos = info["x_pos"]
@@ -116,7 +121,7 @@ class MarioNet(nn.Module):
             # remove the last picture of the list and insert the new one
             img_list.pop(0)
             next_image = self.convert_to_greyscale(next_image)
-            img_list.append(torch.from_numpy(next_image).float())
+            img_list.append(torch.from_numpy(next_image).float().to(self.device))
 
             self.steps += 1
 
