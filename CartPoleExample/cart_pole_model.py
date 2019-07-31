@@ -22,10 +22,10 @@ class PolicyNet(nn.Module):
         super(PolicyNet, self).__init__()
 
         # create the environment
-        self.env = gym.make('CartPole-v0')
+        self.env = gym.make('CartPole-v1')
         # set a seed for reproducibility
-        self.env.seed(1)
-        torch.manual_seed(1)
+        self.env.seed(42)
+        torch.manual_seed(42)
 
         # set the discount factor and the batch_size
         self.gamma = gamma
