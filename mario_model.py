@@ -49,7 +49,7 @@ class MarioNet(nn.Module):
 
         self.optimizer = optimizer(self.parameters(), lr=learning_rate)
 
-        self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        self.device = torch.device("cpu" if torch.cuda.is_available() else "cpu")
         self.to(self.device)
 
     def __del__(self):
@@ -97,6 +97,11 @@ class MarioNet(nn.Module):
             # take the action
             next_image, reward, done, info = self.env.step(action)
             reward = torch.tensor([reward], device=self.device)
+
+
+            # if mario hit an enemy end the episode and update the weights
+            if info["life"] < 2:
+                break
 
 
             # append the current x position to the list
