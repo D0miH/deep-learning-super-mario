@@ -24,6 +24,9 @@ NUM_EPOCHS = 1000
 GAMMA = 0.99
 MAX_STEPS_PER_EPOCH = 500
 
+DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+
 def create_environment():
     """Creates the environment, applies some wrappers and returns it."""
     tmp_env = gym_super_mario_bros.make(LEVEL_NAME)
@@ -47,30 +50,31 @@ def select_action_based_on_state(state, policy_net):
 
 def lazyframe_to_tensor(lazy_frame):
     # pytorch expects the frames as height x width x depth
-    return torch.from_numpy(np.expand_dims(np.asarray(lazy_frame).transpose((2, 1, 0)), axis=0)).float()
+    return torch.from_numpy(np.expand_dims(np.asarray(lazy_frame).astype(np.float64).transpose((2, 1, 0)), axis=0))
 
 
 def finish_episode(policy_net, optimizer):
-    R = 0
+    cumulative_reward = 0
     policy_loss = []
-    returns = []
+    rewards = []
     for r in reversed(policy_net.rewards):
-        R = r + GAMMA * R
-        returns.insert(0, R)
+        cumulative_reward = r + GAMMA * cumulative_reward
+        rewards.insert(0, cumulative_reward)
 
     # normalize the returns
-    returns = torch.tensor(returns)
-    returns = (returns - returns.mean()) / returns.std() + np.finfo(np.float32).eps.item()
+    rewards = torch.tensor(rewards)
+    rewards = (rewards - rewards.mean()) / rewards.std() + np.finfo(np.float32).eps.item()
 
-    for log_prob, R in zip(policy_net.saved_log_probs, returns):
-        policy_loss.append(-log_prob * R)
+    for log_prob, cumulative_reward in zip(policy_net.saved_log_probs, rewards):
+        policy_loss.append(-log_prob * cumulative_reward)
 
     optimizer.zero_grad()
-    policy_loss = torch.cat(policy_loss).sum()
+    policy_loss = torch.cat(policy_loss).sum().to(DEVICE)
     policy_loss.backward()
     optimizer.step()
     del policy_net.rewards[:]
     del policy_net.saved_log_probs[:]
+    del policy_loss
 
 
 class Policy(nn.Module):
@@ -110,19 +114,23 @@ class Policy(nn.Module):
 
 
 env = create_environment()
-policy = Policy(env.action_space.n)
+policy = Policy(env.action_space.n).to(DEVICE)
 optimizer = optim.Adam(policy.parameters(), lr=LEARNING_RATE)
 
 reward_history = []
 for episode in range(NUM_EPOCHS):
     state, last_reward = lazyframe_to_tensor(env.reset()), 0
+    state.to(DEVICE, dtype=torch.float)
 
     for step in range(MAX_STEPS_PER_EPOCH):
         # perform an action
         action = select_action_based_on_state(state, policy)
-
+        # delete the last state to prevent memory overflow
+        del state
         state, reward, done, info = env.step(action)
+
         state = lazyframe_to_tensor(state)
+        state.to(DEVICE)
 
         if RENDER_GAME:
             env.render()
