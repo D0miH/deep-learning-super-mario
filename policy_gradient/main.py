@@ -15,15 +15,14 @@ from torch.distributions import Categorical
 # env settings
 LEVEL_NAME = "SuperMarioBros-v0"
 FRAME_DIM = (120, 132, 4)  # original image size is 240x256
-ACTION_SPACE = RIGHT_ONLY
+ACTION_SPACE = COMPLEX_MOVEMENT
 RENDER_GAME = True
 
 # training hyperparameters
 LEARNING_RATE = 0.0001
 NUM_EPOCHS = 1000
-BATCH_SIZE = 1000
 GAMMA = 0.99
-
+MAX_STEPS_PER_EPOCH = 500
 
 def create_environment():
     """Creates the environment, applies some wrappers and returns it."""
@@ -32,20 +31,6 @@ def create_environment():
     tmp_env = wrapper(tmp_env, FRAME_DIM)
 
     return tmp_env
-
-
-def discount_and_normalize_rewards(episode_rewards):
-    discounted_episode_rewards = np.zeros_like(episode_rewards)
-    cumulative = 0.0
-    for i in reversed(range(len(episode_rewards))):
-        cumulative = cumulative * GAMMA + episode_rewards[i]
-        discounted_episode_rewards[i] = cumulative
-
-    mean = np.mean(discounted_episode_rewards)
-    std = np.std(discounted_episode_rewards)
-    discounted_episode_rewards = (discounted_episode_rewards - mean) / std
-
-    return discounted_episode_rewards
 
 
 def select_action_based_on_state(state, policy_net):
@@ -58,6 +43,34 @@ def select_action_based_on_state(state, policy_net):
     action = pred_action_dist.sample()
     policy_net.saved_log_probs.append(pred_action_dist.log_prob(action))
     return action.item()
+
+
+def lazyframe_to_tensor(lazy_frame):
+    # pytorch expects the frames as height x width x depth
+    return torch.from_numpy(np.expand_dims(np.asarray(lazy_frame).transpose((2, 1, 0)), axis=0)).float()
+
+
+def finish_episode(policy_net, optimizer):
+    R = 0
+    policy_loss = []
+    returns = []
+    for r in reversed(policy_net.rewards):
+        R = r + GAMMA * R
+        returns.insert(0, R)
+
+    # normalize the returns
+    returns = torch.tensor(returns)
+    returns = (returns - returns.mean()) / returns.std() + np.finfo(np.float32).eps.item()
+
+    for log_prob, R in zip(policy_net.saved_log_probs, returns):
+        policy_loss.append(-log_prob * R)
+
+    optimizer.zero_grad()
+    policy_loss = torch.cat(policy_loss).sum()
+    policy_loss.backward()
+    optimizer.step()
+    del policy_net.rewards[:]
+    del policy_net.saved_log_probs[:]
 
 
 class Policy(nn.Module):
@@ -96,34 +109,6 @@ class Policy(nn.Module):
         return out
 
 
-def lazyframe_to_tensor(lazy_frame):
-    # pytorch expects the frames as height x width x depth
-    return torch.from_numpy(np.expand_dims(np.asarray(lazy_frame).transpose((2, 1, 0)), axis=0)).float()
-
-
-def finish_episode(policy_net, optimizer):
-    R = 0
-    policy_loss = []
-    returns = []
-    for r in reversed(policy_net.rewards):
-        R = r + GAMMA * R
-        returns.insert(0, R)
-
-    # normalize the returns
-    returns = torch.tensor(returns)
-    returns = (returns - returns.mean()) / returns.std() + np.finfo(np.float32).eps.item()
-
-    for log_prob, R in zip(policy_net.saved_log_probs, returns):
-        policy_loss.append(-log_prob * R)
-
-    optimizer.zero_grad()
-    policy_loss = torch.cat(policy_loss).sum()
-    policy_loss.backward()
-    optimizer.step()
-    del policy_net.rewards[:]
-    del policy_net.saved_log_probs[:]
-
-
 env = create_environment()
 policy = Policy(env.action_space.n)
 optimizer = optim.Adam(policy.parameters(), lr=LEARNING_RATE)
@@ -132,9 +117,10 @@ reward_history = []
 for episode in range(NUM_EPOCHS):
     state, last_reward = lazyframe_to_tensor(env.reset()), 0
 
-    for step in count():
+    for step in range(MAX_STEPS_PER_EPOCH):
         # perform an action
         action = select_action_based_on_state(state, policy)
+
         state, reward, done, info = env.step(action)
         state = lazyframe_to_tensor(state)
 
@@ -144,8 +130,10 @@ for episode in range(NUM_EPOCHS):
         policy.rewards.append(reward)
         last_reward += reward
 
-        if done:
-            print("Episode {}\tLast Reward: {:.2f}\tAverage reward: {:.2f}".format(episode, last_reward, np.mean(reward_history)))
+        if done or info["life"] < 2:
+            reward_history.append(last_reward)
+            print("Episode {}\tLast Reward: {:.2f}\tAverage reward: {:.2f}".format(episode, last_reward,
+                                                                                   np.mean(reward_history)))
             break
 
     finish_episode(policy, optimizer)
