@@ -147,9 +147,9 @@ class FrameStack(gym.Wrapper):
         return LazyFrames(list(self.frames))
 
 
-def wrapper(env):
+def wrapper(env, frame_dim):
     """Apply multiple wrappers to the given environment."""
     env = MaxAndSkipEnv(env)
-    env = WarpFrame(env)
+    env = WarpFrame(env, width=frame_dim[0], height=frame_dim[1])
     # stack 4 frames
-    return FrameStack(env, 4)
+    return FrameStack(env, frame_dim[2])
