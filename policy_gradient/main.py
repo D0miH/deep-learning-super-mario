@@ -50,7 +50,7 @@ def select_action_based_on_state(state, policy_net):
 
 def lazyframe_to_tensor(lazy_frame):
     # pytorch expects the frames as height x width x depth
-    return torch.from_numpy(np.expand_dims(np.asarray(lazy_frame).astype(np.float64).transpose((2, 1, 0)), axis=0))
+    return torch.from_numpy(np.expand_dims(np.asarray(lazy_frame).astype(np.float64).transpose((2, 1, 0)), axis=0)).float().to(DEVICE)
 
 
 def finish_episode(policy_net, optimizer):
@@ -120,7 +120,6 @@ optimizer = optim.Adam(policy.parameters(), lr=LEARNING_RATE)
 reward_history = []
 for episode in range(NUM_EPOCHS):
     state, last_reward = lazyframe_to_tensor(env.reset()), 0
-    state.to(DEVICE, dtype=torch.float)
 
     for step in range(MAX_STEPS_PER_EPOCH):
         # perform an action
@@ -130,7 +129,6 @@ for episode in range(NUM_EPOCHS):
         state, reward, done, info = env.step(action)
 
         state = lazyframe_to_tensor(state)
-        state.to(DEVICE)
 
         if RENDER_GAME:
             env.render()
