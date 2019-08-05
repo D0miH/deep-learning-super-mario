@@ -5,6 +5,7 @@ from gym_super_mario_bros.actions import SIMPLE_MOVEMENT, COMPLEX_MOVEMENT, RIGH
 from nes_py.wrappers import JoypadSpace
 from wrappers import wrapper
 
+import matplotlib.pyplot as plt
 import numpy as np
 import torch
 import torch.nn as nn
@@ -23,6 +24,9 @@ LEARNING_RATE = 0.0001
 NUM_EPOCHS = 1000
 GAMMA = 0.99
 MAX_STEPS_PER_EPOCH = 500
+
+LOG_INTERVAL = 1
+PLOT_INTERVAL = 1
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -50,7 +54,8 @@ def select_action_based_on_state(state, policy_net):
 
 def lazyframe_to_tensor(lazy_frame):
     # pytorch expects the frames as height x width x depth
-    return torch.from_numpy(np.expand_dims(np.asarray(lazy_frame).astype(np.float64).transpose((2, 1, 0)), axis=0)).float().to(DEVICE)
+    return torch.from_numpy(
+        np.expand_dims(np.asarray(lazy_frame).astype(np.float64).transpose((2, 1, 0)), axis=0)).float().to(DEVICE)
 
 
 def finish_episode(policy_net, optimizer):
@@ -75,6 +80,13 @@ def finish_episode(policy_net, optimizer):
     del policy_net.rewards[:]
     del policy_net.saved_log_probs[:]
     del policy_loss
+
+
+def plot_rewards(reward_list, reward_mean_history):
+    plt.plot(reward_list, "b-", reward_mean_history, "r-")
+    plt.ylabel("Rewards")
+    plt.xlabel("Episodes")
+    plt.show()
 
 
 class Policy(nn.Module):
@@ -118,10 +130,11 @@ policy = Policy(env.action_space.n).to(DEVICE)
 optimizer = optim.Adam(policy.parameters(), lr=LEARNING_RATE)
 
 reward_history = []
+reward_mean_history = []
 for episode in range(NUM_EPOCHS):
     state, last_reward = lazyframe_to_tensor(env.reset()), 0
 
-    for step in range(MAX_STEPS_PER_EPOCH):
+    for step in count():
         # perform an action
         action = select_action_based_on_state(state, policy)
         # delete the last state to prevent memory overflow
@@ -138,8 +151,14 @@ for episode in range(NUM_EPOCHS):
 
         if done or info["life"] < 2:
             reward_history.append(last_reward)
-            print("Episode {}\tLast Reward: {:.2f}\tAverage reward: {:.2f}".format(episode, last_reward,
-                                                                                   np.mean(reward_history)))
+            reward_mean_history.append(np.mean(reward_history))
             break
+
+    if episode % LOG_INTERVAL == 0:
+        print("Episode {}\tLast Reward: {:.2f}\tAverage reward: {:.2f}".format(episode, last_reward,
+                                                                               reward_mean_history[-1]))
+
+    if episode % PLOT_INTERVAL == 0:
+        plot_rewards(reward_history, reward_mean_history)
 
     finish_episode(policy, optimizer)
