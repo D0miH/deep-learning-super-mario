@@ -41,15 +41,14 @@ def create_environment():
 
 
 def select_action_based_on_state(state, policy_net):
-    """Returns the sampled action."""
+    """Returns the sampled action and the log of the probability density."""
     # get the probability distribution of the prediction
     pred_action_probs = policy_net.forward(state)
     pred_action_dist = Categorical(pred_action_probs)
 
     # sample an action from the probability distribution
     action = pred_action_dist.sample()
-    policy_net.saved_log_probs.append(pred_action_dist.log_prob(action))
-    return action.item()
+    return action.item(), pred_action_dist.log_prob(action)
 
 
 def lazyframe_to_tensor(lazy_frame):
@@ -58,27 +57,26 @@ def lazyframe_to_tensor(lazy_frame):
         np.expand_dims(np.asarray(lazy_frame).astype(np.float64).transpose((2, 1, 0)), axis=0)).float().to(DEVICE)
 
 
-def finish_episode(policy_net, optimizer):
+def finish_episode(policy_net, optimizer, log_prob_history, rewards):
     cumulative_reward = 0
     policy_loss = []
-    rewards = []
-    for r in reversed(policy_net.rewards):
+    discounted_rewards = []
+    for r in reversed(rewards):
         cumulative_reward = r + GAMMA * cumulative_reward
-        rewards.insert(0, cumulative_reward)
+        discounted_rewards.insert(0, cumulative_reward)
 
     # normalize the returns
-    rewards = torch.tensor(rewards)
-    rewards = (rewards - rewards.mean()) / rewards.std() + np.finfo(np.float32).eps.item()
+    discounted_rewards = torch.tensor(discounted_rewards)
+    discounted_rewards = (discounted_rewards - discounted_rewards.mean()) / discounted_rewards.std() + np.finfo(
+        np.float32).eps.item()
 
-    for log_prob, cumulative_reward in zip(policy_net.saved_log_probs, rewards):
+    for log_prob, cumulative_reward in zip(log_prob_history, discounted_rewards):
         policy_loss.append(-log_prob * cumulative_reward)
 
     optimizer.zero_grad()
     policy_loss = torch.cat(policy_loss).sum().to(DEVICE)
     policy_loss.backward()
     optimizer.step()
-    del policy_net.rewards[:]
-    del policy_net.saved_log_probs[:]
     del policy_loss
 
 
@@ -92,9 +90,6 @@ def plot_rewards(reward_list, reward_mean_history):
 class Policy(nn.Module):
     def __init__(self, num_actions):
         super(Policy, self).__init__()
-
-        self.saved_log_probs = []
-        self.rewards = []
 
         self.conv1 = nn.Conv2d(in_channels=FRAME_DIM[2], out_channels=32, kernel_size=8, stride=2)
         self.conv1_bn = nn.BatchNorm2d(32)
@@ -131,12 +126,16 @@ optimizer = optim.Adam(policy.parameters(), lr=LEARNING_RATE)
 
 reward_history = []
 reward_mean_history = []
+
+step_log_prob_history = []
+step_reward_history = []
 for episode in range(NUM_EPOCHS):
     state, last_reward = lazyframe_to_tensor(env.reset()), 0
 
     for step in count():
         # perform an action
-        action = select_action_based_on_state(state, policy)
+        action, log_prob = select_action_based_on_state(state, policy)
+        step_log_prob_history.append(log_prob)
         # delete the last state to prevent memory overflow
         del state
         state, reward, done, info = env.step(action)
@@ -146,7 +145,7 @@ for episode in range(NUM_EPOCHS):
         if RENDER_GAME:
             env.render()
 
-        policy.rewards.append(reward)
+        step_reward_history.append(reward)
         last_reward += reward
 
         if done or info["life"] < 2:
@@ -161,4 +160,8 @@ for episode in range(NUM_EPOCHS):
     if episode % PLOT_INTERVAL == 0:
         plot_rewards(reward_history, reward_mean_history)
 
-    finish_episode(policy, optimizer)
+    finish_episode(policy, optimizer, step_log_prob_history, step_reward_history)
+    del step_reward_history[:]
+    del step_reward_history[:]
+    step_reward_history = []
+    step_log_prob_history = []
