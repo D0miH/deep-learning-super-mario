@@ -21,7 +21,8 @@ ACTION_SPACE = COMPLEX_MOVEMENT
 RENDER_GAME = True
 
 # training hyperparameters
-LEARNING_RATE = 0.0001
+ACTOR_LEARNING_RATE = 0.0001
+CRITIC_LEARNING_RATE = 0.001
 NUM_EPOCHS = 1000
 GAMMA = 0.99
 MAX_STEPS_PER_EPOCH = 100
@@ -191,9 +192,9 @@ class Critic(nn.Module):
 env = create_environment()
 
 actor = Actor(env.action_space.n).to(DEVICE)
-optimizer_actor = optim.Adam(actor.parameters(), lr=LEARNING_RATE)
+optimizer_actor = optim.Adam(actor.parameters(), lr=ACTOR_LEARNING_RATE)
 critic = Critic().to(DEVICE)
-optimizer_critic = optim.Adam(critic.parameters(), lr=LEARNING_RATE)
+optimizer_critic = optim.Adam(critic.parameters(), lr=CRITIC_LEARNING_RATE)
 
 reward_history = []
 reward_mean_history = []
