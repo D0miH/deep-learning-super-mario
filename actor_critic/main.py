@@ -17,14 +17,14 @@ from torch.distributions import Categorical
 # env settings
 LEVEL_NAME = "SuperMarioBros-v0"
 FRAME_DIM = (120, 132, 4)  # original image size is 240x256
-ACTION_SPACE = COMPLEX_MOVEMENT
+ACTION_SPACE = RIGHT_ONLY
 RENDER_GAME = True
 
 # training hyperparameters
 LEARNING_RATE = 0.03
 NUM_EPOCHS = 1000
 GAMMA = 0.99
-MAX_STEPS_PER_EPOCH = 100
+MAX_STEPS_PER_EPOCH = 500
 
 LOG_INTERVAL = 1
 PLOT_INTERVAL = 10
