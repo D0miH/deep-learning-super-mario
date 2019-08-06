@@ -21,8 +21,7 @@ ACTION_SPACE = COMPLEX_MOVEMENT
 RENDER_GAME = True
 
 # training hyperparameters
-ACTOR_LEARNING_RATE = 0.0001
-CRITIC_LEARNING_RATE = 0.001
+LEARNING_RATE = 0.03
 NUM_EPOCHS = 1000
 GAMMA = 0.99
 MAX_STEPS_PER_EPOCH = 100
@@ -42,16 +41,13 @@ def create_environment():
     return tmp_env
 
 
-def select_action_based_on_state(given_state, actor_net, critic_net):
+def select_action_based_on_state(given_state, given_actor_critic_net):
     """Returns the sampled action and the log of the probability density."""
-    # get the probability distribution of the prediction
-    pred_action_probs = actor_net.forward(given_state)
-    pred_action_dist = Categorical(pred_action_probs)
 
-    # get the predicted future reward from the critic
-    pred_future_reward = critic_net.forward(given_state)
+    pred_action_dist, pred_future_reward = given_actor_critic_net.forward(given_state)
 
     # sample an action from the probability distribution
+    pred_action_dist = Categorical(pred_action_dist)
     sampled_action = pred_action_dist.sample()
     return sampled_action.item(), SavedAction(pred_action_dist.log_prob(sampled_action), pred_future_reward)
 
@@ -62,7 +58,7 @@ def lazy_frame_to_tensor(lazy_frame):
         np.expand_dims(np.asarray(lazy_frame).astype(np.float64).transpose((2, 1, 0)), axis=0)).float().to(DEVICE)
 
 
-def finish_episode(given_actor_optimizer, given_critic_optimizer, given_action_history, rewards):
+def finish_episode(ac_net_optimizer, given_action_history, rewards):
     cumulative_reward = 0
 
     policy_losses = []  # to save the actors policy losses
@@ -89,40 +85,36 @@ def finish_episode(given_actor_optimizer, given_critic_optimizer, given_action_h
         # calculate the critics loss
         value_losses.append(F.smooth_l1_loss(value, torch.tensor([[cumulative_reward]]).to(DEVICE)))
 
-    # perform backprop step in both networks
-    given_actor_optimizer.zero_grad()
-    policy_loss = torch.cat(policy_losses).sum().to(DEVICE)
-    policy_loss.backward()
-    given_actor_optimizer.step()
+    # perform backprop
+    ac_net_optimizer.zero_grad()
+    loss = (torch.stack(policy_losses).sum() + torch.stack(value_losses).sum()).to(DEVICE)
+    loss.backward()
+    ac_net_optimizer.step()
 
-    given_critic_optimizer.zero_grad()
-    value_loss = torch.stack(value_losses).sum().to(DEVICE)
-    value_loss.backward()
-    given_critic_optimizer.step()
-
-    del policy_loss
-    del value_loss
+    del loss
 
 
 def plot_rewards(reward_list, given_reward_mean_history):
     plt.plot(reward_list, "b-", given_reward_mean_history, "r-")
     plt.ylabel("Rewards")
     plt.xlabel("Episodes")
+    plt.legend(["Reward per episode", "Average reward"])
     plt.show()
 
 
 SavedAction = namedtuple("SavedAction", ["log_prob", "future_reward"])
 
 
-class Actor(nn.Module):
+class ActorCriticNet(nn.Module):
     """
     Neural net to select the next action to take.
     The output is a probability distribution over all possible actions.
     """
 
     def __init__(self, num_actions):
-        super(Actor, self).__init__()
+        super(ActorCriticNet, self).__init__()
 
+        # create a convolution net
         self.conv1 = nn.Conv2d(in_channels=FRAME_DIM[2], out_channels=32, kernel_size=8, stride=2)
         self.conv1_bn = nn.BatchNorm2d(32)
 
@@ -133,7 +125,12 @@ class Actor(nn.Module):
         self.conv3_bn = nn.BatchNorm2d(128)
 
         self.fc1 = nn.Linear(in_features=21504, out_features=512)
-        self.fc2 = nn.Linear(in_features=512, out_features=num_actions)
+
+        # create one output for the actor
+        self.head_actor = nn.Linear(in_features=512, out_features=num_actions)
+
+        # create one output for the critic
+        self.head_critic = nn.Linear(in_features=512, out_features=1)
 
     def forward(self, x):
         out = self.conv1(x)
@@ -147,54 +144,20 @@ class Actor(nn.Module):
         out = out.view(out.size()[0], -1)
 
         out = F.elu(self.fc1(out))
-        out = F.softmax(self.fc2(out), dim=-1)
 
-        return out
+        # get the probability dist of the actor
+        actor_out = F.softmax(self.head_actor(out), dim=-1)
 
+        # get the predicted future reward of the critic
+        critic_out = self.head_critic(out)
 
-class Critic(nn.Module):
-    """
-    Neural net to learn the value at a given state. The output is the expected future reward of the given state.
-    """
-
-    def __init__(self):
-        super(Critic, self).__init__()
-
-        self.conv1 = nn.Conv2d(in_channels=FRAME_DIM[2], out_channels=32, kernel_size=8, stride=2)
-        self.conv1_bn = nn.BatchNorm2d(32)
-
-        self.conv2 = nn.Conv2d(in_channels=32, out_channels=64, kernel_size=4, stride=2)
-        self.conv2_bn = nn.BatchNorm2d(64)
-
-        self.conv3 = nn.Conv2d(in_channels=64, out_channels=128, kernel_size=4, stride=2)
-        self.conv3_bn = nn.BatchNorm2d(128)
-
-        self.fc1 = nn.Linear(in_features=21504, out_features=512)
-        self.fc2 = nn.Linear(in_features=512, out_features=1)
-
-    def forward(self, x):
-        out = self.conv1(x)
-        out = F.elu(self.conv1_bn(out))
-
-        out = self.conv2(out)
-        out = F.elu(self.conv2_bn(out))
-
-        out = self.conv3(out)
-        out = F.elu(self.conv3_bn(out))
-        out = out.view(out.size()[0], -1)
-
-        out = F.elu(self.fc1(out))
-        out = self.fc2(out)
-
-        return out
+        return actor_out, critic_out
 
 
 env = create_environment()
 
-actor = Actor(env.action_space.n).to(DEVICE)
-optimizer_actor = optim.Adam(actor.parameters(), lr=ACTOR_LEARNING_RATE)
-critic = Critic().to(DEVICE)
-optimizer_critic = optim.Adam(critic.parameters(), lr=CRITIC_LEARNING_RATE)
+ac_net = ActorCriticNet(env.action_space.n).to(DEVICE)
+optimizer = optim.Adam(ac_net.parameters(), lr=LEARNING_RATE)
 
 reward_history = []
 reward_mean_history = []
@@ -206,7 +169,7 @@ for episode in range(1, NUM_EPOCHS):
 
     for step in count(1):
         # perform an action
-        action, saved_action = select_action_based_on_state(state, actor, critic)
+        action, saved_action = select_action_based_on_state(state, ac_net)
         action_history.append(saved_action)
         # delete the last state to prevent memory overflow
         del state
@@ -232,7 +195,7 @@ for episode in range(1, NUM_EPOCHS):
     if episode % PLOT_INTERVAL == 0:
         plot_rewards(reward_history, reward_mean_history)
 
-    finish_episode(optimizer_actor, optimizer_critic, action_history, step_reward_history)
+    finish_episode(optimizer, action_history, step_reward_history)
     del step_reward_history[:]
     del action_history[:]
     step_reward_history = []
