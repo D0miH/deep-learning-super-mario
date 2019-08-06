@@ -1,5 +1,6 @@
 from itertools import count
 
+import cv2
 import gym_super_mario_bros
 from gym_super_mario_bros.actions import SIMPLE_MOVEMENT, COMPLEX_MOVEMENT, RIGHT_ONLY
 from nes_py.wrappers import JoypadSpace
@@ -23,10 +24,10 @@ RENDER_GAME = True
 LEARNING_RATE = 0.0001
 NUM_EPOCHS = 1000
 GAMMA = 0.99
-MAX_STEPS_PER_EPOCH = 500
+MAX_STEPS_PER_EPOCH = 1000
 
 LOG_INTERVAL = 1
-PLOT_INTERVAL = 1
+PLOT_INTERVAL = 10
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -57,7 +58,7 @@ def lazyframe_to_tensor(lazy_frame):
         np.expand_dims(np.asarray(lazy_frame).astype(np.float64).transpose((2, 1, 0)), axis=0)).float().to(DEVICE)
 
 
-def finish_episode(policy_net, optimizer, log_prob_history, rewards):
+def finish_episode(optimizer, log_prob_history, rewards):
     cumulative_reward = 0
     policy_loss = []
     discounted_rewards = []
@@ -129,6 +130,11 @@ reward_mean_history = []
 
 step_log_prob_history = []
 step_reward_history = []
+
+# save one example warped image for preview
+state = env.reset()
+cv2.imwrite("exampleWarpedImage.jpg", np.asarray(state))
+
 for episode in range(NUM_EPOCHS):
     state, last_reward = lazyframe_to_tensor(env.reset()), 0
 
@@ -148,7 +154,7 @@ for episode in range(NUM_EPOCHS):
         step_reward_history.append(reward)
         last_reward += reward
 
-        if done or info["life"] < 2:
+        if done or info["life"] < 2 or step >= MAX_STEPS_PER_EPOCH:
             reward_history.append(last_reward)
             reward_mean_history.append(np.mean(reward_history))
             break
@@ -160,7 +166,7 @@ for episode in range(NUM_EPOCHS):
     if episode % PLOT_INTERVAL == 0:
         plot_rewards(reward_history, reward_mean_history)
 
-    finish_episode(policy, optimizer, step_log_prob_history, step_reward_history)
+    finish_episode(optimizer, step_log_prob_history, step_reward_history)
     del step_reward_history[:]
     del step_reward_history[:]
     step_reward_history = []
