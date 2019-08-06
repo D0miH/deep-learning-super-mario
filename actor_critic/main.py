@@ -150,6 +150,8 @@ class ActorCriticNet(nn.Module):
 
 
 env = create_environment()
+env.seed(1)
+torch.manual_seed(1)
 
 ac_net = ActorCriticNet(env.action_space.n).to(DEVICE)
 optimizer = optim.Adam(ac_net.parameters(), lr=LEARNING_RATE)
@@ -169,6 +171,12 @@ for episode in range(1, NUM_EPOCHS):
         # delete the last state to prevent memory overflow
         del state
         state, reward, done, info = env.step(action)
+
+        if info["life"] < 2:
+            step_reward_history.append(reward)
+            reward_history.append(last_reward)
+            reward_mean_history.append(np.mean(reward_history))
+            break
 
         state = lazy_frame_to_tensor(state)
 
