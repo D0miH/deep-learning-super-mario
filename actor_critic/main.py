@@ -21,10 +21,10 @@ ACTION_SPACE = RIGHT_ONLY
 RENDER_GAME = True
 
 # training hyperparameters
-LEARNING_RATE = 0.03
+LEARNING_RATE = 0.003
 NUM_EPOCHS = 1000
 GAMMA = 0.99
-MAX_STEPS_PER_EPOCH = 500
+#MAX_STEPS_PER_EPOCH = 500
 
 LOG_INTERVAL = 1
 PLOT_INTERVAL = 10
@@ -170,11 +170,6 @@ for episode in range(1, NUM_EPOCHS):
         del state
         state, reward, done, info = env.step(action)
 
-        if done or info["life"] < 2 or step >= MAX_STEPS_PER_EPOCH:
-            reward_history.append(last_reward)
-            reward_mean_history.append(np.mean(reward_history))
-            break
-
         state = lazy_frame_to_tensor(state)
 
         if RENDER_GAME:
@@ -182,6 +177,11 @@ for episode in range(1, NUM_EPOCHS):
 
         step_reward_history.append(reward)
         last_reward += reward
+
+        if done:
+            reward_history.append(last_reward)
+            reward_mean_history.append(np.mean(reward_history))
+            break
 
     if episode % LOG_INTERVAL == 0:
         print("Episode {}\tLast Reward: {:.2f}\tAverage reward: {:.2f}".format(episode, last_reward,
