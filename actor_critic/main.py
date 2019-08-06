@@ -21,10 +21,10 @@ ACTION_SPACE = RIGHT_ONLY
 RENDER_GAME = True
 
 # training hyperparameters
-LEARNING_RATE = 0.003
+LEARNING_RATE = 0.01
 NUM_EPOCHS = 1000
 GAMMA = 0.99
-#MAX_STEPS_PER_EPOCH = 500
+# MAX_STEPS_PER_EPOCH = 500
 
 LOG_INTERVAL = 1
 PLOT_INTERVAL = 10
@@ -91,7 +91,7 @@ def finish_episode(ac_net_optimizer, given_action_history, rewards):
     loss.backward()
     ac_net_optimizer.step()
 
-    del loss
+    return loss
 
 
 def plot_rewards(reward_list, given_reward_mean_history):
@@ -173,7 +173,10 @@ for episode in range(1, NUM_EPOCHS):
         state, reward, done, info = env.step(action)
 
         if info["life"] < 2:
-            step_reward_history.append(reward)
+            # the environment is doing some strange things here. We have to ensure that the last reward is negative
+            if reward < 0:
+                step_reward_history.append(reward)
+
             reward_history.append(last_reward)
             reward_mean_history.append(np.mean(reward_history))
             break
@@ -191,14 +194,16 @@ for episode in range(1, NUM_EPOCHS):
             reward_mean_history.append(np.mean(reward_history))
             break
 
+    loss = finish_episode(optimizer, action_history, step_reward_history)
+
     if episode % LOG_INTERVAL == 0:
-        print("Episode {}\tLast Reward: {:.2f}\tAverage reward: {:.2f}".format(episode, last_reward,
-                                                                               reward_mean_history[-1]))
+        print("Episode {}\tLast Reward: {:.2f}\tAverage reward: {:.2f}\tLoss: {:.2f}".format(episode, last_reward,
+                                                                                             reward_mean_history[-1],
+                                                                                             loss))
 
     if episode % PLOT_INTERVAL == 0:
         plot_rewards(reward_history, reward_mean_history)
 
-    finish_episode(optimizer, action_history, step_reward_history)
     del step_reward_history[:]
     del action_history[:]
     step_reward_history = []
