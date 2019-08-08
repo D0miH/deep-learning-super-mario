@@ -14,19 +14,19 @@ import torch
 # env settings
 LEVEL_NAME = "SuperMarioBros-v0"
 FRAME_DIM = (120, 132, 4)  # original image size is 240x256
-ACTION_SPACE = RIGHT_ONLY
+ACTION_SPACE = COMPLEX_MOVEMENT
 RENDER_GAME = True
 
 # training hyperparameters
-LEARNING_RATE = 0.03  # gradient seems to be exploding :/ in particular the entropy loss is exploding maybe we could clip the reward
+ACTOR_LEARNING_RATE = 0.03  # gradient seems to be exploding :/ in particular the entropy loss is exploding maybe we could clip the reward
+CRITIC_LEARNING_RATE = 0.03
 NUM_EPOCHS = 1000
 GAMMA = 0.99  # the discount factor
 BETA = 1  # the scaling of the entropy
-ZETA = 0.1  # the scaling of the value loss
-# MAX_STEPS_PER_EPOCH = 500
+ZETA = 1  # the scaling of the value loss
 
 LOG_INTERVAL = 1
-PLOT_INTERVAL = 10
+PLOT_INTERVAL = 1
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -58,7 +58,7 @@ env = create_environment()
 env.seed(1)
 torch.manual_seed(1)
 
-agent = Agent(env.action_space.n, FRAME_DIM, GAMMA, BETA, ZETA, LEARNING_RATE, DEVICE)
+agent = Agent(env.action_space.n, FRAME_DIM, GAMMA, BETA, ZETA, ACTOR_LEARNING_RATE, CRITIC_LEARNING_RATE, DEVICE)
 
 reward_history = []
 reward_mean_history = []
@@ -101,14 +101,16 @@ for episode in range(1, NUM_EPOCHS):
             break
 
     # update the agent based on the trajectory
-    agent.update(trajectory)
+    critic_loss, actor_loss = agent.update(trajectory)
     # delete the trajectory to save memory
     del trajectory
 
     # log some info
     if episode % LOG_INTERVAL == 0:
-        print("Episode {}\tReward: {:.2f}\tAverage reward: {:.2f}".format(episode, episode_reward,
-                                                                          reward_mean_history[-1]))
+        print("Episode {}\tReward: {:.2f}\tAverage reward: {:.2f}\tActor Loss: {:.2f}\tCritic Loss: {:.2f}".format(
+            episode, episode_reward,
+            reward_mean_history[-1], actor_loss, critic_loss))
+    del critic_loss, actor_loss
     if episode % PLOT_INTERVAL == 0:
         plot_rewards(reward_history, reward_mean_history)
         agent.plot_loss()
