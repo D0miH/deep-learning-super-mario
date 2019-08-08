@@ -10,7 +10,6 @@ from actor_critic.agent import Agent
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
-import torch.optim as optim
 
 # env settings
 LEVEL_NAME = "SuperMarioBros-v0"
@@ -19,14 +18,15 @@ ACTION_SPACE = RIGHT_ONLY
 RENDER_GAME = True
 
 # training hyperparameters
-LEARNING_RATE = 0.0000005  # gradient seems to be exploding :/ maybe we could clip the reward
+LEARNING_RATE = 0.03  # gradient seems to be exploding :/ in particular the entropy loss is exploding maybe we could clip the reward
 NUM_EPOCHS = 1000
 GAMMA = 0.99  # the discount factor
-BETA = 0.05  # the scaling of the entropy
+BETA = 1  # the scaling of the entropy
+ZETA = 0.1  # the scaling of the value loss
 # MAX_STEPS_PER_EPOCH = 500
 
 LOG_INTERVAL = 1
-PLOT_INTERVAL = 1000
+PLOT_INTERVAL = 10
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -58,7 +58,7 @@ env = create_environment()
 env.seed(1)
 torch.manual_seed(1)
 
-agent = Agent(env.action_space.n, FRAME_DIM, GAMMA, BETA, LEARNING_RATE, DEVICE)
+agent = Agent(env.action_space.n, FRAME_DIM, GAMMA, BETA, ZETA, LEARNING_RATE, DEVICE)
 
 reward_history = []
 reward_mean_history = []
@@ -111,5 +111,6 @@ for episode in range(1, NUM_EPOCHS):
                                                                           reward_mean_history[-1]))
     if episode % PLOT_INTERVAL == 0:
         plot_rewards(reward_history, reward_mean_history)
+        agent.plot_loss()
 
     torch.cuda.empty_cache()
