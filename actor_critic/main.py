@@ -14,7 +14,7 @@ import torch
 # env settings
 LEVEL_NAME = "SuperMarioBros-v0"
 FRAME_DIM = (120, 132, 4)  # original image size is 240x256
-ACTION_SPACE = COMPLEX_MOVEMENT
+ACTION_SPACE = SIMPLE_MOVEMENT
 RENDER_GAME = True
 
 # training hyperparameters

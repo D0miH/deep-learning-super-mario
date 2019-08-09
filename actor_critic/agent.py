@@ -85,19 +85,23 @@ class Agent:
         """Updates the actor and critic based on the trajectory."""
         critic_loss, advantages = self.compute_critic_loss(trajectory)
         self.critic_loss_history.append(critic_loss)
-
-        actor_loss = self.compute_actor_loss(trajectory, advantages)
-        self.actor_loss_history.append(actor_loss)
-
+        # backprop for the critic
         self.critic_optimizer.zero_grad()
         critic_loss.backward()
         self.critic_optimizer.step()
+        critic_loss_value = critic_loss.item()
+        del critic_loss
 
+        actor_loss = self.compute_actor_loss(trajectory, advantages)
+        self.actor_loss_history.append(actor_loss)
+        # backprop for the actor
         self.actor_optimizer.zero_grad()
         actor_loss.backward()
         self.actor_optimizer.step()
+        actor_loss_value = actor_loss.item()
+        del actor_loss
 
-        return critic_loss, actor_loss
+        return critic_loss_value, actor_loss_value
 
     def plot_loss(self):
         actor_loss_history = torch.FloatTensor(self.actor_loss_history)
