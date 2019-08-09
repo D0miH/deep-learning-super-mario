@@ -7,20 +7,31 @@ class ActorNet(nn.Module):
     Neural net to select the next action to take.
     The output are logits. You should use softmax to get the probability distribution.
     """
+
     def __init__(self, num_actions, frame_dim):
         super(ActorNet, self).__init__()
 
         # create a convolution net
-        self.conv1 = nn.Conv2d(in_channels=frame_dim[2], out_channels=32, kernel_size=8, stride=2)
+        self.conv1 = nn.Conv2d(in_channels=frame_dim[2], out_channels=32, kernel_size=2, stride=1)
         self.conv1_bn = nn.BatchNorm2d(32)
 
-        self.conv2 = nn.Conv2d(in_channels=32, out_channels=64, kernel_size=4, stride=2)
-        self.conv2_bn = nn.BatchNorm2d(64)
+        self.conv2 = nn.Conv2d(in_channels=32, out_channels=32, kernel_size=2, stride=1)
+        self.conv2_bn = nn.BatchNorm2d(32)
 
-        self.conv3 = nn.Conv2d(in_channels=64, out_channels=128, kernel_size=3, stride=1)
-        self.conv3_bn = nn.BatchNorm2d(128)
+        self.conv3 = nn.Conv2d(in_channels=32, out_channels=32, kernel_size=2, stride=1)
+        self.conv3_bn = nn.BatchNorm2d(32)
 
-        self.fc1 = nn.Linear(in_features=89600, out_features=512)
+        def conv2d_size_out(size, kernel_size=5, stride=2):
+            return (size - (kernel_size - 1) - 1) // stride + 1
+
+        # calculate the output size of the last conv layer
+        conv_width = conv2d_size_out(
+            conv2d_size_out(conv2d_size_out(frame_dim[1], kernel_size=2, stride=1), kernel_size=2, stride=1),
+            kernel_size=2, stride=1)
+        conv_height = conv2d_size_out(
+            conv2d_size_out(conv2d_size_out(frame_dim[0], kernel_size=2, stride=1), kernel_size=2, stride=1),
+            kernel_size=2, stride=1)
+        self.fc1 = nn.Linear(in_features=conv_width * conv_height * 32, out_features=512)
 
         # create one output for the actor
         self.head_actor = nn.Linear(in_features=512, out_features=num_actions)
@@ -54,16 +65,27 @@ class CriticNet(nn.Module):
         super(CriticNet, self).__init__()
 
         # create a convolution net
-        self.conv1 = nn.Conv2d(in_channels=frame_dim[2], out_channels=32, kernel_size=8, stride=2)
+        self.conv1 = nn.Conv2d(in_channels=frame_dim[2], out_channels=32, kernel_size=2, stride=1)
         self.conv1_bn = nn.BatchNorm2d(32)
 
-        self.conv2 = nn.Conv2d(in_channels=32, out_channels=64, kernel_size=4, stride=2)
-        self.conv2_bn = nn.BatchNorm2d(64)
+        self.conv2 = nn.Conv2d(in_channels=32, out_channels=32, kernel_size=2, stride=1)
+        self.conv2_bn = nn.BatchNorm2d(32)
 
-        self.conv3 = nn.Conv2d(in_channels=64, out_channels=128, kernel_size=3, stride=1)
-        self.conv3_bn = nn.BatchNorm2d(128)
+        self.conv3 = nn.Conv2d(in_channels=32, out_channels=32, kernel_size=2, stride=1)
+        self.conv3_bn = nn.BatchNorm2d(32)
 
-        self.fc1 = nn.Linear(in_features=89600, out_features=512)
+        def conv2d_size_out(size, kernel_size=5, stride=2):
+            return (size - (kernel_size - 1) - 1) // stride + 1
+
+        # calculate the output size of the last conv layer
+        conv_width = conv2d_size_out(
+            conv2d_size_out(conv2d_size_out(frame_dim[1], kernel_size=2, stride=1), kernel_size=2, stride=1),
+            kernel_size=2, stride=1)
+        conv_height = conv2d_size_out(
+            conv2d_size_out(conv2d_size_out(frame_dim[0], kernel_size=2, stride=1), kernel_size=2, stride=1),
+            kernel_size=2, stride=1)
+
+        self.fc1 = nn.Linear(in_features=conv_width * conv_height * 32, out_features=512)
 
         self.head_critic = nn.Linear(in_features=512, out_features=1)
 
@@ -85,4 +107,3 @@ class CriticNet(nn.Module):
         critic_out = self.head_critic(out)
 
         return critic_out
-
