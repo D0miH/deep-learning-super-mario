@@ -18,7 +18,6 @@ import gym_super_mario_bros
 from nes_py.wrappers import JoypadSpace
 from gym_super_mario_bros.actions import SIMPLE_MOVEMENT
 
-import neuroevolution
 import model
 import mariogame
 
@@ -71,37 +70,37 @@ def mutate(agent):
 
     return child_agent
 
-torch.set_grad_enabled(False)
-print(DIRNAME)
-num_agents = 10
-elite_count = 1
-top_limit_count = 2
+def __init__():
+    torch.set_grad_enabled(False)
+    num_agents = 10
+    elite_count = 1
+    top_limit_count = 2
 
-generation_count = 1000
+    generation_count = 1000
 
-agents = mariogame.return_random_agents(num_agents)
+    agents = mariogame.return_random_agents(num_agents)
 
-for generation in range(generation_count):
-    rewards = mariogame.run_agents_n_times(agents, 3)
+    for generation in range(generation_count):
+        rewards = mariogame.run_agents_n_times(agents, 3)
 
-    sorted_parent_indexes = np.argsort(rewards)[::-1][:top_limit_count]
+        sorted_parent_indexes = np.argsort(rewards)[::-1][:top_limit_count]
 
-    top_rewards = []
-    for best_parent in sorted_parent_indexes:
-        top_rewards.append(rewards[best_parent])
+        top_rewards = []
+        for best_parent in sorted_parent_indexes:
+            top_rewards.append(rewards[best_parent])
 
-    print("## Generation {} ##".format(generation))
-    print("Mean reward: {}  |   Mean of top 5: {}".format(np.mean(rewards),\
-        np.mean(top_rewards[:5])))
-    print("Top agents: {}   |   Reward: {}".format(sorted_parent_indexes, \
-        top_rewards))
-    print("################\n\n")
-    sys.stdout.flush()
+        print("## Generation {} ##".format(generation+1))
+        print("Mean reward: {}      |   Mean of top 5: {}".format(\
+            int(np.mean(rewards)), int(np.mean(top_rewards[:5]))))
+        print("Top agents: {}   |   Reward: {}".format(sorted_parent_indexes, \
+            top_rewards))
+        print("##################\n\n")
+        sys.stdout.flush()
 
-    with open(os.path.join(DIRNAME, "/Output/fittestMario.txt"), 'wb') as output:
-        pickle.dump(agents[sorted_parent_indexes[0]], output, \
-            pickle.HIGHEST_PROTOCOL)
+        with open(os.path.join(DIRNAME, "Output/fittestMario.txt"), 'wb') as output:
+            pickle.dump(agents[sorted_parent_indexes[0]], output, \
+                pickle.HIGHEST_PROTOCOL)
 
-    children_agents = return_children(agents, sorted_parent_indexes, elite_count)
+        children_agents = return_children(agents, sorted_parent_indexes, elite_count)
 
-    agents = children_agents
+        agents = children_agents
