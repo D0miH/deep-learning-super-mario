@@ -49,7 +49,7 @@ class MarioNet(nn.Module):
 
         self.optimizer = optimizer(self.parameters(), lr=learning_rate)
 
-        self.device = torch.device("cpu" if torch.cuda.is_available() else "cpu")
+        self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         self.to(self.device)
 
     def __del__(self):
