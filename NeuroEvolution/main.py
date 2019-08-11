@@ -24,7 +24,7 @@ import mariogame
 train_mario = False
 
 if train_mario:
-    neuroevolution.__init__
+    neuroevolution.main()
 else:
     with open(os.path.join(DIRNAME, "Output/fittestMario.txt"), 'rb') as input:
         fittestMario = pickle.load(input)

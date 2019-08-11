@@ -35,10 +35,11 @@ def run_agent(agent):
     state = env.reset()
     state = convert_image(state).flatten()
     state_list = [state, state, state, state]
-
+    position = -1
+    
     global_reward=0
     s=0
-    for _ in range(1000):
+    for _ in range(10000):
         input = torch.tensor(state_list).type('torch.FloatTensor').view(1,-1)
         output_probabilities = agent(input).detach().numpy()[0]
         action = np.random.choice(range(action_count), 1, \
@@ -50,6 +51,17 @@ def run_agent(agent):
 
         state_list.pop(0)
         state_list.append(convert_image(new_state))
+
+        # if mario gets stuck, it gets punished and the loop gets broken
+        if position == info["x_pos"]:
+            stuck += 1
+            if stuck == 40:
+                global_reward -= 50
+                break
+        else:
+            stuck = 0
+
+        position = info["x_pos"]
 
         #Mario died
         if info["life"] < 2:
@@ -100,7 +112,7 @@ def play_agent(agent):
 
         global_reward=0
         s=0
-        for _ in range(1000):
+        for _ in range(10000):
             input = torch.tensor(state_list).type('torch.FloatTensor').view(1,-1)
             output_probabilities = agent(input).detach().numpy()[0]
             action = np.random.choice(range(action_count), 1, \

@@ -70,7 +70,7 @@ def mutate(agent):
 
     return child_agent
 
-def __init__():
+def main():
     torch.set_grad_enabled(False)
     num_agents = 10
     elite_count = 1
