@@ -16,7 +16,7 @@ from torch.distributions import Categorical
 
 # env settings
 LEVEL_NAME = "SuperMarioBros-v0"
-FRAME_DIM = (120, 132, 4)  # original image size is 240x256
+FRAME_DIM = (84, 84, 4)  # original image size is 240x256
 ACTION_SPACE = COMPLEX_MOVEMENT
 RENDER_GAME = True
 
@@ -24,7 +24,6 @@ RENDER_GAME = True
 LEARNING_RATE = 0.0001
 NUM_EPOCHS = 1000
 GAMMA = 0.99
-MAX_STEPS_PER_EPOCH = 1000
 
 LOG_INTERVAL = 1
 PLOT_INTERVAL = 10
@@ -92,17 +91,17 @@ class Policy(nn.Module):
     def __init__(self, num_actions):
         super(Policy, self).__init__()
 
-        self.conv1 = nn.Conv2d(in_channels=FRAME_DIM[2], out_channels=32, kernel_size=8, stride=2)
+        self.conv1 = nn.Conv2d(in_channels=FRAME_DIM[2], out_channels=32, kernel_size=3, stride=2)
         self.conv1_bn = nn.BatchNorm2d(32)
 
-        self.conv2 = nn.Conv2d(in_channels=32, out_channels=64, kernel_size=4, stride=2)
+        self.conv2 = nn.Conv2d(in_channels=32, out_channels=64, kernel_size=3, stride=1)
         self.conv2_bn = nn.BatchNorm2d(64)
 
-        self.conv3 = nn.Conv2d(in_channels=64, out_channels=128, kernel_size=4, stride=2)
-        self.conv3_bn = nn.BatchNorm2d(128)
+        self.conv3 = nn.Conv2d(in_channels=64, out_channels=64, kernel_size=3, stride=1)
+        self.conv3_bn = nn.BatchNorm2d(64)
 
-        self.fc1 = nn.Linear(in_features=21504, out_features=512)
-        self.fc2 = nn.Linear(in_features=512, out_features=num_actions)
+        self.fc1 = nn.Linear(in_features=87616, out_features=1024)
+        self.fc2 = nn.Linear(in_features=1024, out_features=num_actions)
 
     def forward(self, x):
         out = self.conv1(x)
@@ -146,6 +145,16 @@ for episode in range(NUM_EPOCHS):
         del state
         state, reward, done, info = env.step(action)
 
+        if done or info["life"] < 2:
+            # the environment is doing some strange things here. We have to ensure that the last reward is negative.
+            if reward < 0:
+                step_reward_history.append(reward)
+
+            last_reward += reward
+            reward_history.append(last_reward)
+            reward_mean_history.append(np.mean(reward_history))
+            break
+
         state = lazyframe_to_tensor(state)
 
         if RENDER_GAME:
@@ -153,11 +162,6 @@ for episode in range(NUM_EPOCHS):
 
         step_reward_history.append(reward)
         last_reward += reward
-
-        if done or info["life"] < 2 or step >= MAX_STEPS_PER_EPOCH:
-            reward_history.append(last_reward)
-            reward_mean_history.append(np.mean(reward_history))
-            break
 
     if episode % LOG_INTERVAL == 0:
         print("Episode {}\tLast Reward: {:.2f}\tAverage reward: {:.2f}".format(episode, last_reward,

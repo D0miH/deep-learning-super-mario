@@ -17,11 +17,11 @@ class DQNetwork:
 
         # this architecture is the same as in the deep mind atari paper "Playing Atari with Deep Reinforcement Learning"
         self.model = Sequential()
-        self.model.add(layers.Conv2D(input_shape=stacked_frame_dim, filters=32, kernel_size=8, strides=4,
+        self.model.add(layers.Conv2D(input_shape=stacked_frame_dim, filters=32, kernel_size=3, strides=2,
                                      activation="relu"))
-        self.model.add(layers.Conv2D(filters=64, kernel_size=4, strides=2, activation="relu"))
+        self.model.add(layers.Conv2D(filters=64, kernel_size=3, strides=1, activation="relu"))
         self.model.add(layers.Conv2D(filters=64, kernel_size=3, strides=1, activation="relu"))
         self.model.add(layers.Flatten())
-        self.model.add(layers.Dense(512, activation="relu"))
+        self.model.add(layers.Dense(1024, activation="relu"))
         self.model.add(layers.Dense(num_actions))
         self.model.compile(loss=LOSS, optimizer=OPTIMIZER, metrics=["accuracy"])

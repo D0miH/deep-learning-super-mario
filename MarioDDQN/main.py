@@ -10,15 +10,15 @@ import numpy as np
 
 from MarioDDQN.dq_network import DQNetwork
 from MarioDDQN.replay_memory import ReplayMemory
-from MarioDDQN.wrappers import wrapper
+from wrappers import wrapper
 
 FRAME_DIM = (84, 84, 4)
-ACTION_SPACE = SIMPLE_MOVEMENT
+ACTION_SPACE = RIGHT_ONLY
 REPLAY_MEMORY_CAPACITY = 100_000
 NUM_EPISODES = 10_000
 MAX_STEPS_PER_GAME = 1000
 GAMMA = 0.99
-RENDER_ENVIRONMENT = False
+RENDER_ENVIRONMENT = True
 
 BATCH_SIZE = 32
 TRAIN_FREQUENCE = 4  # number of total steps after which the policy model is trained
@@ -28,11 +28,6 @@ EXPLORATION_MAX = 1.0
 EXPLORATION_MIN = 0.1
 EXPLORATION_STEPS = 1_000_000
 EXPLORATION_DECAY = (EXPLORATION_MAX - EXPLORATION_MIN) / EXPLORATION_STEPS
-
-
-###################################
-#####  CODE IS AT THE BOTTOM  #####
-###################################
 
 def get_next_action(state, action_space, current_exploration):
     """Returns the next action."""
@@ -83,7 +78,7 @@ def train_policy_model(replay_memory, policy_model, target_model):
 env = gym_super_mario_bros.make("SuperMarioBros-v0")
 env = JoypadSpace(env, ACTION_SPACE)
 # apply the wrapper
-env = wrapper(env)
+env = wrapper(env, FRAME_DIM)
 
 # create the network
 policy_net = DQNetwork(stacked_frame_dim=FRAME_DIM, num_actions=env.action_space.n)

@@ -1,6 +1,5 @@
 from itertools import count
 import gym
-import atari_py
 
 from wrappers import wrapper
 from actor_critic.agent import Agent
@@ -11,17 +10,16 @@ import torch
 
 # env settings
 LEVEL_NAME = "SpaceInvaders-v0"
-FRAME_DIM = (84, 84, 4)  # original image size is 240x256
+FRAME_DIM = (84, 84, 4)
 RENDER_GAME = True
 
 # training hyperparameters
-ACTOR_LEARNING_RATE = 0.03  # gradient seems to be exploding :/ in particular the entropy loss is exploding maybe we could clip the reward
-CRITIC_LEARNING_RATE = 0.03
+ACTOR_LEARNING_RATE = 0.0003  # gradient seems to be exploding :/ in particular the entropy loss is exploding maybe we could clip the reward
+CRITIC_LEARNING_RATE = 0.0003
 NUM_EPOCHS = 1000
 GAMMA = 0.99  # the discount factor
 BETA = 1  # the scaling of the entropy
 ZETA = 1  # the scaling of the value loss
-TRAIN_INNTERVAL = 10_000  # number of steps after which the agent is trained
 
 LOG_INTERVAL = 1
 PLOT_INTERVAL = 1
@@ -60,7 +58,6 @@ agent = Agent(env.action_space.n, FRAME_DIM, GAMMA, BETA, ZETA, ACTOR_LEARNING_R
 reward_history = []
 reward_mean_history = []
 
-trajectory_history = []
 total_steps = 0
 for episode in range(1, NUM_EPOCHS):
     state = lazy_frame_to_tensor(env.reset())
@@ -93,15 +90,11 @@ for episode in range(1, NUM_EPOCHS):
             reward_mean_history.append(np.mean(reward_history))
             break
 
-        if total_steps % TRAIN_INNTERVAL == 0:
-            agent.update(trajectory_history)
-            del trajectory_history[:]
-
-    trajectory_history.append(trajectory)
+    agent.update(trajectory)
 
     # log some info
     if episode % LOG_INTERVAL == 0:
-        print("Episode {}\tReward: {:.2f}\tAverage reward: {:.2f}\tActor Loss: {:.2f}\tCritic Loss: {:.2f}".format(
+        print("Episode {}\tReward: {:.2f}\tAverage reward: {:.2f}".format(
             episode, episode_reward,
             reward_mean_history[-1]))
 
