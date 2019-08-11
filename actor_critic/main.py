@@ -12,13 +12,13 @@ import numpy as np
 import torch
 
 # env settings
-LEVEL_NAME = "SuperMarioBros-v0"
-FRAME_DIM = (120, 132, 4)  # original image size is 240x256
-ACTION_SPACE = SIMPLE_MOVEMENT
+LEVEL_NAME = "SuperMarioBros-v2"
+FRAME_DIM = (84, 84, 4)  # original image size is 240x256
+ACTION_SPACE = COMPLEX_MOVEMENT
 RENDER_GAME = True
 
 # training hyperparameters
-ACTOR_LEARNING_RATE = 0.03  # gradient seems to be exploding :/ in particular the entropy loss is exploding maybe we could clip the reward
+ACTOR_LEARNING_RATE = 0.03
 CRITIC_LEARNING_RATE = 0.03
 NUM_EPOCHS = 1000
 GAMMA = 0.99  # the discount factor
