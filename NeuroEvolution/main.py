@@ -18,4 +18,11 @@ import neuroevolution
 import model
 import mariogame
 
-neuroevolution.__init__
+
+train_mario = True
+
+if train_mario:
+    neuroevolution.__init__
+else:
+    with open(os.path.join(DIRNAME, "/Output/fittestMario.txt"), 'rb') as input:
+    fittestMario = pickle.load(input)

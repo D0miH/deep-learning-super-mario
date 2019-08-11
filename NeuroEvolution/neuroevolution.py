@@ -10,6 +10,9 @@ import torch.optim as optim
 import math
 import copy
 import sys
+import os
+import pickle
+DIRNAME = os.path.dirname(__file__)
 
 import gym_super_mario_bros
 from nes_py.wrappers import JoypadSpace
@@ -69,7 +72,7 @@ def mutate(agent):
     return child_agent
 
 torch.set_grad_enabled(False)
-
+print(DIRNAME)
 num_agents = 10
 elite_count = 1
 top_limit_count = 2
@@ -87,11 +90,17 @@ for generation in range(generation_count):
     for best_parent in sorted_parent_indexes:
         top_rewards.append(rewards[best_parent])
 
-    print("Generation ", generation, " | Mean rewards: ", np.mean(rewards),
-        " | Mean of top 5: ",np.mean(top_rewards[:5]))
-    print("Top ",top_limit_count," scores", sorted_parent_indexes)
-    print("Rewards for top: ",top_rewards)
+    print("## Generation {} ##".format(generation))
+    print("Mean reward: {}  |   Mean of top 5: {}".format(np.mean(rewards),\
+        np.mean(top_rewards[:5])))
+    print("Top agents: {}   |   Reward: {}".format(sorted_parent_indexes, \
+        top_rewards))
+    print("################\n\n")
     sys.stdout.flush()
+
+    with open(os.path.join(DIRNAME, "/Output/fittestMario.txt"), 'wb') as output:
+        pickle.dump(agents[sorted_parent_indexes[0]], output, \
+            pickle.HIGHEST_PROTOCOL)
 
     children_agents = return_children(agents, sorted_parent_indexes, elite_count)
 

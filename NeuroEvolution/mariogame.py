@@ -38,7 +38,7 @@ def run_agent(agent):
 
     global_reward=0
     s=0
-    for _ in range(250):
+    while True:
         input = torch.tensor(state_list).type('torch.FloatTensor').view(1,-1)
         output_probabilities = agent(input).detach().numpy()[0]
         action = np.random.choice(range(action_count), 1, p=output_probabilities).item()
@@ -50,7 +50,8 @@ def run_agent(agent):
         state_list.pop(0)
         state_list.append(convert_image(new_state))
 
-        if(done):
+        #Mario died
+        if info["life"] < 2:
             break
 
     return global_reward
