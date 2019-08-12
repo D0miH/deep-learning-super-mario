@@ -1,35 +1,38 @@
 from itertools import count
-import gym
+
+import gym_super_mario_bros
+from gym_super_mario_bros.actions import SIMPLE_MOVEMENT, COMPLEX_MOVEMENT, RIGHT_ONLY
+from nes_py.wrappers import JoypadSpace
 
 from wrappers import wrapper
-from actor_critic.agent import Agent
+from actor_critic.two_head_agent import TwoHeadAgent
 
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
 
 # env settings
-LEVEL_NAME = "SpaceInvaders-v0"
-FRAME_DIM = (84, 84, 4)
+LEVEL_NAME = "SuperMarioBros-v2"
+FRAME_DIM = (84, 84, 4)  # original image size is 240x256
+ACTION_SPACE = SIMPLE_MOVEMENT
 RENDER_GAME = True
 
 # training hyperparameters
-ACTOR_LEARNING_RATE = 0.0003  # gradient seems to be exploding :/ in particular the entropy loss is exploding maybe we could clip the reward
-CRITIC_LEARNING_RATE = 0.0003
+LEARNING_RATE = 0.00003
 NUM_EPOCHS = 1000
 GAMMA = 0.99  # the discount factor
-BETA = 1  # the scaling of the entropy
 ZETA = 1  # the scaling of the value loss
 
 LOG_INTERVAL = 1
-PLOT_INTERVAL = 1
+PLOT_INTERVAL = 10
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
 def create_environment():
     """Creates the environment, applies some wrappers and returns it."""
-    tmp_env = gym.make(LEVEL_NAME)
+    tmp_env = gym_super_mario_bros.make(LEVEL_NAME)
+    tmp_env = JoypadSpace(tmp_env, ACTION_SPACE)
     tmp_env = wrapper(tmp_env, FRAME_DIM)
 
     return tmp_env
@@ -50,15 +53,13 @@ def plot_rewards(reward_list, given_reward_mean_history):
 
 
 env = create_environment()
-env.seed(1)
-torch.manual_seed(1)
+env.seed(42)
+torch.manual_seed(42)
 
-agent = Agent(env.action_space.n, FRAME_DIM, GAMMA, BETA, ZETA, ACTOR_LEARNING_RATE, CRITIC_LEARNING_RATE, DEVICE)
+agent = TwoHeadAgent(env.action_space.n, FRAME_DIM, GAMMA, ZETA, LEARNING_RATE, DEVICE)
 
 reward_history = []
 reward_mean_history = []
-
-total_steps = 0
 for episode in range(1, NUM_EPOCHS):
     state = lazy_frame_to_tensor(env.reset())
 
@@ -72,6 +73,15 @@ for episode in range(1, NUM_EPOCHS):
         next_state, reward, done, info = env.step(action)
         next_state = lazy_frame_to_tensor(next_state)
 
+        if info["life"] < 2:
+            # the environment is doing some strange things here. We have to ensure that the last reward is negative.
+            if reward < 0:
+                trajectory.append([state, action, reward, next_state, done])
+
+            reward_history.append(episode_reward)
+            reward_mean_history.append(np.mean(reward_history))
+            break
+
         trajectory.append([state, action, reward, next_state, done])
 
         # update the reward of the episode
@@ -79,8 +89,6 @@ for episode in range(1, NUM_EPOCHS):
 
         # update the state and delete the previous one
         state = next_state
-
-        total_steps += 1
 
         if RENDER_GAME:
             env.render()
@@ -90,14 +98,17 @@ for episode in range(1, NUM_EPOCHS):
             reward_mean_history.append(np.mean(reward_history))
             break
 
-    agent.update(trajectory)
+    # update the agent based on the trajectory
+    critic_loss, actor_loss = agent.update(trajectory)
+    # delete the trajectory to save memory
+    del trajectory
 
     # log some info
     if episode % LOG_INTERVAL == 0:
-        print("Episode {}\tReward: {:.2f}\tAverage reward: {:.2f}".format(
+        print("Episode {}\tReward: {:.2f}\tAverage reward: {:.2f}\tActor Loss: {:.2f}\tCritic Loss: {:.2f}".format(
             episode, episode_reward,
-            reward_mean_history[-1]))
-
+            reward_mean_history[-1], actor_loss, critic_loss))
+    del critic_loss, actor_loss
     if episode % PLOT_INTERVAL == 0:
         plot_rewards(reward_history, reward_mean_history)
         agent.plot_loss()
