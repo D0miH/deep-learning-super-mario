@@ -2,6 +2,7 @@ from itertools import count
 
 import gym_super_mario_bros
 from gym_super_mario_bros.actions import SIMPLE_MOVEMENT, COMPLEX_MOVEMENT, RIGHT_ONLY
+from gym.wrappers import Monitor
 from nes_py.wrappers import JoypadSpace
 
 from wrappers import wrapper
@@ -25,6 +26,7 @@ ZETA = 1  # the scaling of the value loss
 
 LOG_INTERVAL = 1
 PLOT_INTERVAL = 10
+VIDEO_INTERVAL = 1
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -50,6 +52,27 @@ def plot_rewards(reward_list, given_reward_mean_history):
     plt.xlabel("Episodes")
     plt.legend(["Reward per episode", "Average reward"])
     plt.show()
+
+
+def record_one_episode(agent):
+    env = create_environment()
+    env = Monitor(env, './video', force=True)
+
+    state = lazy_frame_to_tensor(env.reset())
+
+    total_reward = 0
+    while True:
+        action = agent.get_action(state)
+
+        next_state, reward, done, info = env.step(action)
+        next_state = lazy_frame_to_tensor(next_state)
+
+        if done:
+            break
+
+        total_reward += reward
+
+        state = next_state
 
 
 env = create_environment()
@@ -112,5 +135,9 @@ for episode in range(1, NUM_EPOCHS):
     if episode % PLOT_INTERVAL == 0:
         plot_rewards(reward_history, reward_mean_history)
         agent.plot_loss()
+    if episode % VIDEO_INTERVAL == 0:
+        agent.model.eval()
+        record_one_episode(agent)
+        agent.model.train()
 
     torch.cuda.empty_cache()
