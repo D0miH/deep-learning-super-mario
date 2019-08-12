@@ -14,15 +14,15 @@ import torch
 # env settings
 LEVEL_NAME = "SuperMarioBros-v2"
 FRAME_DIM = (84, 84, 4)  # original image size is 240x256
-ACTION_SPACE = COMPLEX_MOVEMENT
+ACTION_SPACE = SIMPLE_MOVEMENT
 RENDER_GAME = True
 
 # training hyperparameters
-ACTOR_LEARNING_RATE = 0.03
-CRITIC_LEARNING_RATE = 0.03
+ACTOR_LEARNING_RATE = 0.00003
+CRITIC_LEARNING_RATE = 0.00003
 NUM_EPOCHS = 1000
 GAMMA = 0.99  # the discount factor
-BETA = 1  # the scaling of the entropy
+BETA = 0.01  # the scaling of the entropy
 ZETA = 1  # the scaling of the value loss
 
 LOG_INTERVAL = 1
@@ -55,8 +55,8 @@ def plot_rewards(reward_list, given_reward_mean_history):
 
 
 env = create_environment()
-env.seed(1)
-torch.manual_seed(1)
+env.seed(42)
+torch.manual_seed(42)
 
 agent = Agent(env.action_space.n, FRAME_DIM, GAMMA, BETA, ZETA, ACTOR_LEARNING_RATE, CRITIC_LEARNING_RATE, DEVICE)
 

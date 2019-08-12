@@ -56,23 +56,22 @@ class ActorNet(nn.Module):
 
         # create one output for the actor
         self.head_actor = nn.Linear(in_features=1024, out_features=num_actions)
-        self.actor_bn = nn.BatchNorm1d(num_actions)
 
     def forward(self, x):
         out = self.conv1_bn(self.conv1(x))
-        out = F.elu(out)
+        out = F.relu(out)
 
         out = self.conv2_bn(self.conv2(out))
-        out = F.elu(out)
+        out = F.relu(out)
 
         out = self.conv3_bn(self.conv3(out))
-        out = F.elu(out)
+        out = F.relu(out)
 
         out = out.view(out.size()[0], -1)
 
-        out = F.elu(self.fc1(out))
+        out = F.relu(self.fc1(out))
 
-        actor_out = self.actor_bn(self.head_actor(out))
+        actor_out = self.head_actor(out)
 
         return actor_out
 
@@ -119,17 +118,17 @@ class CriticNet(nn.Module):
 
     def forward(self, x):
         out = self.conv1_bn(self.conv1(x))
-        out = F.elu(out)
+        out = F.relu(out)
 
         out = self.conv2_bn(self.conv2(out))
-        out = F.elu(out)
+        out = F.relu(out)
 
         out = self.conv3_bn(self.conv3(out))
-        out = F.elu(out)
+        out = F.relu(out)
 
         out = out.view(out.size()[0], -1)
 
-        out = F.elu(self.fc1(out))
+        out = F.relu(self.fc1(out))
 
         # get the predicted future reward of the critic
         critic_out = self.head_critic(out)

@@ -107,8 +107,14 @@ class Agent:
         actor_loss_history = torch.FloatTensor(self.actor_loss_history)
         critic_loss_history = torch.FloatTensor(self.critic_loss_history)
 
-        plt.plot(actor_loss_history.numpy(), "y-", critic_loss_history.numpy(), "m-")
+        plt.plot(actor_loss_history.numpy(), "y-")
         plt.ylabel("Loss")
         plt.xlabel("Episodes")
-        plt.legend(["Actor Loss per Episode", "Critic Loss per Episode"])
+        plt.title("Actor Loss")
+        plt.show()
+
+        plt.plot(critic_loss_history.numpy(), "m-")
+        plt.ylabel("Loss")
+        plt.xlabel("Episodes")
+        plt.title("Critic Loss")
         plt.show()
