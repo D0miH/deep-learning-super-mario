@@ -111,23 +111,23 @@ for episode in range(1, NUM_EPOCHS):
         del state
         state, reward, done, info = env.step(action)
 
-        if info["life"] < 2:
-            # the environment is doing some strange things here. We have to ensure that the last reward is negative.
-            if reward < 0:
-                step_reward_history.append(reward)
+        if done and reward < 0:
+            # if we died the reward will be less than zero
+            step_reward_history.append(reward)
 
             last_reward += reward
             reward_history.append(last_reward)
             reward_mean_history.append(np.mean(reward_history))
             break
 
-        if done:
+        if done and reward > 0:
             # if we solved the current level give mario the highest possible reward of 15
             step_reward_history.append(15)
 
             last_reward += 15
             reward_history.append(last_reward)
             reward_mean_history.append(np.mean(reward_history))
+            print("Finished the level")
             break
 
         state = lazy_frame_to_tensor(state)
