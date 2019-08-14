@@ -19,14 +19,14 @@ WORLD = 1
 STAGE = 1
 LEVEL_NAME = "SuperMarioBros-{}-{}-v0".format(WORLD, STAGE)
 FRAME_DIM = (120, 128, 4)  # original image size is 240x256
-ACTION_SPACE = COMPLEX_MOVEMENT
+ACTION_SPACE = SIMPLE_MOVEMENT
 RENDER_GAME = True
 
 MODEL_PATH = ""  # to create a new model set it to ""
 
 # training hyperparameters
 TRAIN_MODEL = True
-LEARNING_RATE = 0.0000005
+LEARNING_RATE = 0.00003
 NUM_EPOCHS = 1_000
 GAMMA = 0.99
 

@@ -12,8 +12,8 @@ import numpy as np
 import torch
 
 # env settings
-LEVEL_NAME = "SuperMarioBros-v2"
-FRAME_DIM = (84, 84, 4)  # original image size is 240x256
+LEVEL_NAME = "SuperMarioBros-v0"
+FRAME_DIM = (120, 128, 4)  # original image size is 240x256
 ACTION_SPACE = SIMPLE_MOVEMENT
 RENDER_GAME = True
 
@@ -26,7 +26,7 @@ BETA = 0.01  # the scaling of the entropy
 ZETA = 1  # the scaling of the value loss
 
 LOG_INTERVAL = 1
-PLOT_INTERVAL = 1
+PLOT_INTERVAL = 10
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -61,7 +61,7 @@ torch.manual_seed(42)
 agent = Agent(env.action_space.n, FRAME_DIM, GAMMA, BETA, ZETA, ACTOR_LEARNING_RATE, CRITIC_LEARNING_RATE, DEVICE)
 
 reward_history = []
-reward_mean_history = []
+reward_mean_history = [0]
 for episode in range(1, NUM_EPOCHS):
     state = lazy_frame_to_tensor(env.reset())
 
@@ -75,13 +75,20 @@ for episode in range(1, NUM_EPOCHS):
         next_state, reward, done, info = env.step(action)
         next_state = lazy_frame_to_tensor(next_state)
 
-        if info["life"] < 2:
-            # the environment is doing some strange things here. We have to ensure that the last reward is negative.
+        if done:
             if reward < 0:
+                # if we died append the negative reward
+                # the environment is doing some strange things here. We have to ensure that the last reward is negative.
                 trajectory.append([state, action, reward, next_state, done])
 
+            if reward > 0:
+                # if we reached the end of the level
+                trajectory.append([state, action, reward, next_state, done])
+                print("Finished level")
+
             reward_history.append(episode_reward)
-            reward_mean_history.append(np.mean(reward_history))
+            if episode >= 100:
+                reward_mean_history.append(np.mean(reward_history))
             break
 
         trajectory.append([state, action, reward, next_state, done])

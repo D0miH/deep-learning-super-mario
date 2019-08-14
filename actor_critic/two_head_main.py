@@ -1,5 +1,7 @@
+import sys
 from itertools import count
 
+import cv2
 import gym_super_mario_bros
 from gym_super_mario_bros.actions import SIMPLE_MOVEMENT, COMPLEX_MOVEMENT, RIGHT_ONLY
 from gym.wrappers import Monitor
@@ -13,20 +15,26 @@ import numpy as np
 import torch
 
 # env settings
-LEVEL_NAME = "SuperMarioBros-v2"
-FRAME_DIM = (84, 84, 4)  # original image size is 240x256
+WORLD = 1
+STAGE = 1
+LEVEL_NAME = "SuperMarioBros-{}-{}-v0".format(WORLD, STAGE)
+FRAME_DIM = (120, 128, 4)  # original image size is 240x256
 ACTION_SPACE = SIMPLE_MOVEMENT
 RENDER_GAME = True
 
+MODEL_PATH = ""  # set it to "" if you don't want to load a model
+
+TRAIN_MODEL = True
 # training hyperparameters
 LEARNING_RATE = 0.00003
 NUM_EPOCHS = 1000
 GAMMA = 0.99  # the discount factor
+BETA = 0.001  # scaling factor of the entropy
 ZETA = 1  # the scaling of the value loss
 
 LOG_INTERVAL = 1
 PLOT_INTERVAL = 10
-VIDEO_INTERVAL = 1
+VIDEO_INTERVAL = 50
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -76,68 +84,72 @@ def record_one_episode(agent):
 
 
 env = create_environment()
-env.seed(42)
-torch.manual_seed(42)
 
-agent = TwoHeadAgent(env.action_space.n, FRAME_DIM, GAMMA, ZETA, LEARNING_RATE, DEVICE)
+agent = TwoHeadAgent(env.action_space.n, FRAME_DIM, GAMMA, BETA, ZETA, LEARNING_RATE, DEVICE, MODEL_PATH)
+
+if not TRAIN_MODEL:
+    record_one_episode(agent)
+    sys.exit()
 
 reward_history = []
-reward_mean_history = []
+reward_mean_history = [0]
+
+# save one example warped image for preview
+state = env.reset()
+cv2.imwrite("exampleWarpedImage.jpg", np.asarray(state))
+
 for episode in range(1, NUM_EPOCHS):
-    state = lazy_frame_to_tensor(env.reset())
+    state, last_reward = lazy_frame_to_tensor(env.reset()), 0
 
-    episode_reward = 0
-    trajectory = []  # in here all the transitions are stored as [[state, action, reward, next_state, done],...]
-    for step in count(1):
-        # get the next action to perform
+    trajectory = []
+    for step in count():
+        # perform an action
         action = agent.get_action(state)
-
-        # perform the action and get the feedback from the environment
+        # delete the last state to prevent memory overflow
         next_state, reward, done, info = env.step(action)
         next_state = lazy_frame_to_tensor(next_state)
 
-        if info["life"] < 2:
-            # the environment is doing some strange things here. We have to ensure that the last reward is negative.
-            if reward < 0:
-                trajectory.append([state, action, reward, next_state, done])
+        if done and reward < 0:
+            # if we died the reward will be less than zero
+            trajectory.append([state, action, reward, next_state, done])
 
-            reward_history.append(episode_reward)
-            reward_mean_history.append(np.mean(reward_history))
+            last_reward += reward
+            reward_history.append(last_reward)
+            if episode >= 100:
+                reward_mean_history.append(np.mean(reward_history))
             break
 
-        trajectory.append([state, action, reward, next_state, done])
+        if done and reward > 0:
+            # if we solved the current level give mario the highest possible reward of 15
+            trajectory.append([state, action, 15, next_state, done])
 
-        # update the reward of the episode
-        episode_reward += reward
-
-        # update the state and delete the previous one
-        state = next_state
+            last_reward += 15
+            reward_history.append(last_reward)
+            if episode >= 100:
+                reward_mean_history.append(np.mean(reward_history))
+            print("Finished the level")
+            break
 
         if RENDER_GAME:
             env.render()
 
-        if done:
-            reward_history.append(episode_reward)
-            reward_mean_history.append(np.mean(reward_history))
-            break
+        trajectory.append([state, action, reward, next_state, done])
+        last_reward += reward
 
-    # update the agent based on the trajectory
+        del state
+        state = next_state
+
     critic_loss, actor_loss = agent.update(trajectory)
-    # delete the trajectory to save memory
-    del trajectory
 
-    # log some info
     if episode % LOG_INTERVAL == 0:
-        print("Episode {}\tReward: {:.2f}\tAverage reward: {:.2f}\tActor Loss: {:.2f}\tCritic Loss: {:.2f}".format(
-            episode, episode_reward,
-            reward_mean_history[-1], actor_loss, critic_loss))
-    del critic_loss, actor_loss
+        print("Episode {}\tLast Reward: {:.2f}\tAverage reward: {:.2f}\tCritic Loss: {:.2f}\tActor Loss: {:.2f}".format(
+            episode, last_reward,
+            reward_mean_history[-1],
+            critic_loss, actor_loss))
     if episode % PLOT_INTERVAL == 0:
         plot_rewards(reward_history, reward_mean_history)
-        agent.plot_loss()
     if episode % VIDEO_INTERVAL == 0:
-        agent.model.eval()
         record_one_episode(agent)
-        agent.model.train()
 
-    torch.cuda.empty_cache()
+    del critic_loss, actor_loss
+    del trajectory[:]

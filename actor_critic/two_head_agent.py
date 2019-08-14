@@ -9,24 +9,25 @@ from actor_critic.model import ActorCriticNet
 
 class TwoHeadAgent:
 
-    def __init__(self, num_actions, frame_dim, gamma, zeta, lr, device):
+    def __init__(self, num_actions, frame_dim, gamma, beta, zeta, lr, device, model_path=""):
         self.device = device
         self.gamma = gamma
         self.zeta = zeta
+        self.beta = beta
 
         self.actor_loss_history = []
         self.critic_loss_history = []
 
         self.model = ActorCriticNet(num_actions=num_actions, frame_dim=frame_dim).to(device)
+        if model_path is not "":
+            self.model.load_state_dict(torch.load(model_path, map_location=self.device))
         self.optimizer = optim.Adam(self.model.parameters(), lr=lr)
 
     def get_action(self, state):
         """Returns a sampled action from the actor network based on the given state."""
-        self.model.eval()
         action_values, _ = self.model.forward(state)
         action_distribution = F.softmax(action_values, dim=0)
         probs = Categorical(action_distribution)
-        self.model.train()
 
         return probs.sample().cpu().detach().item()
 
@@ -61,7 +62,12 @@ class TwoHeadAgent:
         policy_loss = probabilities.log_prob(actions.view(actions.size(0))).view(-1, 1) * advantages
         policy_loss = -policy_loss.mean()
 
-        total_policy_loss = policy_loss
+        entropy = []
+        for dist in action_distribution:
+            entropy.append(-torch.sum(dist.mean() * torch.log(dist)))
+        entropy = torch.stack(entropy).sum() * self.beta
+
+        total_policy_loss = policy_loss - entropy
         return total_policy_loss
 
     def update(self, trajectory):

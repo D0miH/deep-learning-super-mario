@@ -26,11 +26,9 @@ class Agent:
 
     def get_action(self, state):
         """Returns a sampled action from the actor network based on the given state."""
-        self.actor_model.eval()
         action_values = self.actor_model.forward(state)
         action_distribution = F.softmax(action_values, dim=0)
         probs = Categorical(action_distribution)
-        self.actor_model.train()
 
         return probs.sample().cpu().detach().item()
 
