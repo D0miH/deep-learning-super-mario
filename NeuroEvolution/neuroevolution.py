@@ -46,7 +46,7 @@ def mutate(agent):
 
     child_agent = copy.deepcopy(agent)
 
-    mutation_power = 0.00099 #hyper-parameter, 0.2 set from https://arxiv.org/pdf/1712.06567.pdf
+    mutation_power = 0.2 #hyper-parameter, 0.2 set from https://arxiv.org/pdf/1712.06567.pdf
 
     for param in child_agent.parameters():
         if(len(param.shape)==4): #weights of Conv2D
