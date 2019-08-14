@@ -18,15 +18,35 @@ import neuroevolution
 import model
 import mariogame
 
+class Flatten(torch.nn.Module):
+    def forward(self, x):
+        return x.view(x.size()[0], -1)
 
 class NeuralMario(nn.Module):
         def __init__(self, action_count):
             super().__init__()
+            self.cuda()
             self.fc = nn.Sequential(
-                        nn.Linear(512, 128, bias=True),
-                        nn.ReLU(),
-                        nn.Linear(128, action_count, bias=True),
+                        nn.Conv2d(4, 8, 3, bias=True),
+                        nn.ReLU(inplace=True),
+                        nn.Conv2d(8, 6, 3, bias=True),
+                        nn.ReLU(inplace=True),
+                        Flatten(),
+                        nn.Linear(4704, action_count, bias=True),
                         nn.Softmax(dim=1)
+                        #nn.Conv2d(4, 8, 5, bias=True),
+                        #nn.ReLU(inplace=True),
+                        #nn.Conv2d(8, 6, 3, bias=True),
+                        #nn.ReLU(inplace=True),
+                        #nn.Conv2d(6, 4, 3, bias=True),
+                        #nn.ReLU(inplace=True),
+                        #nn.Conv2d(4, 4, 1, bias=True),
+                        #nn.ReLU(inplace=True),
+                        #Flatten(),
+                        #nn.Linear(7056, 128, bias=True),
+                        #nn.ReLU(),
+                        #nn.Linear(128, action_count),
+                        #nn.Softmax(dim=1)
                         )
 
 
