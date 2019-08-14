@@ -46,7 +46,7 @@ def mutate(agent):
 
     child_agent = copy.deepcopy(agent)
 
-    mutation_power = 0.02 #hyper-parameter, set from https://arxiv.org/pdf/1712.06567.pdf
+    mutation_power = 0.2 #hyper-parameter, 0.2 set from https://arxiv.org/pdf/1712.06567.pdf
 
     for param in child_agent.parameters():
         if(len(param.shape)==4): #weights of Conv2D
@@ -70,7 +70,7 @@ def mutate(agent):
 
     return child_agent
 
-def main():
+def main(elite_agent):
     torch.set_grad_enabled(False)
     num_agents = 10
     elite_count = 1
@@ -78,10 +78,13 @@ def main():
 
     generation_count = 1000
 
-    agents = mariogame.return_random_agents(num_agents)
+    if not elite_agent == None:
+        agents = [elite_agent]*num_agents
+    else:
+        agents = mariogame.return_random_agents(num_agents)
 
     for generation in range(generation_count):
-        rewards = mariogame.run_agents_n_times(agents, 3)
+        rewards = mariogame.run_agents_n_times(agents, 2)
 
         sorted_parent_indexes = np.argsort(rewards)[::-1][:top_limit_count]
 

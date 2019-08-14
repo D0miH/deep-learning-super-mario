@@ -22,25 +22,37 @@ import model
 
 def convert_image(input_image):
     image = cv2.cvtColor(input_image, cv2.COLOR_RGB2GRAY)
-    return cv2.resize(image, (1,128))
+    return cv2.resize(image, (32,32))
 
-def run_agent(agent):
+def run_agent(agent, rendering=False, monitoring=False, print_reward=False):
 
     env = gym_super_mario_bros.make("SuperMarioBros-v0")
     env = JoypadSpace(env, SIMPLE_MOVEMENT)
     env.seed(42)
 
+    if monitoring:
+        env = Monitor(env, './video', force=True)
     agent.eval()
 
     state = env.reset()
-    state = convert_image(state).flatten()
+    if rendering:
+        env.render()
+
+    #Conv2d without flatten()
+    state = convert_image(state)#.flatten()
     state_list = [state, state, state, state]
     position = -1
-    
+
     global_reward=0
     s=0
     for _ in range(10000):
-        input = torch.tensor(state_list).type('torch.FloatTensor').view(1,-1)
+        #Conv2d input
+        input = torch.from_numpy(np.array(state_list)).type('torch.FloatTensor')\
+            .unsqueeze(0)
+
+        #Linear input
+        #input = torch.tensor(state_list).type("torch.FloatTensor").view(1,-1)
+
         output_probabilities = agent(input).detach().numpy()[0]
         action = np.random.choice(range(action_count), 1, \
             p=output_probabilities).item()
@@ -48,24 +60,29 @@ def run_agent(agent):
         global_reward += reward
 
         s=s+1
+        if rendering:
+            env.render()
 
-        state_list.pop(0)
-        state_list.append(convert_image(new_state))
+        state_list.pop()
+        #Conv2d without flatten()
+        state_list.append(convert_image(new_state))#.flatten())
 
         # if mario gets stuck, it gets punished and the loop gets broken
         if position == info["x_pos"]:
             stuck += 1
-            if stuck == 40:
-                global_reward -= 50
+            if stuck == 100:
+                global_reward -= 100
                 break
         else:
             stuck = 0
 
         position = info["x_pos"]
-
+        #env.render()
         #Mario died
         if info["life"] < 2:
             break
+    if print_reward:
+        print(global_reward)
 
     return global_reward
 
@@ -95,44 +112,3 @@ def return_random_agents(num_agents):
         agents.append(agent)
 
     return agents
-
-
-
-def play_agent(agent):
-    try:
-        env = gym_super_mario_bros.make("SuperMarioBros-v0")
-        env = JoypadSpace(env, SIMPLE_MOVEMENT)
-        env.seed(42)
-        env.render()
-
-        env_record = Monitor(env, './video', force=True)
-        state = env_record.reset()
-        state = convert_image(state).flatten()
-        state_list = [state, state, state, state]
-
-        global_reward=0
-        s=0
-        for _ in range(10000):
-            input = torch.tensor(state_list).type('torch.FloatTensor').view(1,-1)
-            output_probabilities = agent(input).detach().numpy()[0]
-            action = np.random.choice(range(action_count), 1, \
-                p=output_probabilities).item()
-            new_state, reward, done, info = env_record.step(action)
-            global_reward += reward
-
-            s=s+1
-
-            env_record.render()
-            state_list.pop(0)
-            state_list.append(convert_image(new_state))
-
-            #Mario died
-            if info["life"] < 2:
-                break
-
-
-        print("Rewards: ",global_reward)
-
-    except Exception as e:
-        print(e.__doc__)
-        print(e.message)
