@@ -1,21 +1,51 @@
 from torch import nn
 from torch.functional import F
 
+FIRST_LAYER_KERNEL_SIZE = 3
+FIRST_LAYER_STRIDE = 2
+FIRST_LAYER_OUT = 32
+
+SECOND_LAYER_KERNEL_SIZE = 3
+SECOND_LAYER_STRIDE = 1
+SECOND_LAYER_OUT = 32
+
+THIRD_LAYER_KERNEL_SIZE = 3
+THIRD_LAYER_STRIDE = 1
+THIRD_LAYER_OUT = 32
+
 
 class Policy(nn.Module):
     def __init__(self, num_actions, frame_dim):
         super(Policy, self).__init__()
 
-        self.conv1 = nn.Conv2d(in_channels=frame_dim[2], out_channels=32, kernel_size=3, stride=2)
-        self.conv1_bn = nn.BatchNorm2d(32)
+        self.conv1 = nn.Conv2d(in_channels=frame_dim[2], out_channels=FIRST_LAYER_OUT,
+                               kernel_size=FIRST_LAYER_KERNEL_SIZE, stride=FIRST_LAYER_STRIDE)
+        self.conv1_bn = nn.BatchNorm2d(FIRST_LAYER_OUT)
 
-        self.conv2 = nn.Conv2d(in_channels=32, out_channels=64, kernel_size=3, stride=1)
-        self.conv2_bn = nn.BatchNorm2d(64)
+        self.conv2 = nn.Conv2d(in_channels=FIRST_LAYER_OUT, out_channels=SECOND_LAYER_OUT,
+                               kernel_size=SECOND_LAYER_KERNEL_SIZE, stride=SECOND_LAYER_STRIDE)
+        self.conv2_bn = nn.BatchNorm2d(SECOND_LAYER_OUT)
 
-        self.conv3 = nn.Conv2d(in_channels=64, out_channels=64, kernel_size=3, stride=1)
-        self.conv3_bn = nn.BatchNorm2d(64)
+        self.conv3 = nn.Conv2d(in_channels=SECOND_LAYER_OUT, out_channels=THIRD_LAYER_OUT,
+                               kernel_size=THIRD_LAYER_KERNEL_SIZE, stride=THIRD_LAYER_STRIDE)
+        self.conv3_bn = nn.BatchNorm2d(THIRD_LAYER_OUT)
 
-        self.fc1 = nn.Linear(in_features=87616, out_features=1024)
+        def conv2d_size_out(size, kernel_size, stride):
+            return (size - (kernel_size - 1) - 1) // stride + 1
+
+        # calculate the output size of the last conv layer
+        conv_width = conv2d_size_out(
+            conv2d_size_out(
+                conv2d_size_out(frame_dim[1], kernel_size=FIRST_LAYER_KERNEL_SIZE, stride=FIRST_LAYER_STRIDE),
+                kernel_size=SECOND_LAYER_KERNEL_SIZE, stride=SECOND_LAYER_STRIDE),
+            kernel_size=THIRD_LAYER_KERNEL_SIZE, stride=THIRD_LAYER_STRIDE)
+        conv_height = conv2d_size_out(
+            conv2d_size_out(
+                conv2d_size_out(frame_dim[0], kernel_size=FIRST_LAYER_KERNEL_SIZE, stride=FIRST_LAYER_STRIDE),
+                kernel_size=SECOND_LAYER_KERNEL_SIZE, stride=SECOND_LAYER_STRIDE),
+            kernel_size=THIRD_LAYER_KERNEL_SIZE, stride=THIRD_LAYER_STRIDE)
+        num_neurons = conv_width * conv_height * THIRD_LAYER_OUT
+        self.fc1 = nn.Linear(in_features=num_neurons, out_features=1024)
         self.fc2 = nn.Linear(in_features=1024, out_features=num_actions)
 
     def forward(self, x):

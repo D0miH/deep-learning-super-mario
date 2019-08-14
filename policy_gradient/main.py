@@ -17,12 +17,12 @@ from wrappers import wrapper
 # env settings
 WORLD = 1
 STAGE = 1
-LEVEL_NAME = "SuperMarioBros-{}-{}-v2".format(WORLD, STAGE)
-FRAME_DIM = (84, 84, 4)  # original image size is 240x256
-ACTION_SPACE = SIMPLE_MOVEMENT
+LEVEL_NAME = "SuperMarioBros-{}-{}-v0".format(WORLD, STAGE)
+FRAME_DIM = (120, 128, 4)  # original image size is 240x256
+ACTION_SPACE = COMPLEX_MOVEMENT
 RENDER_GAME = True
 
-MODEL_PATH = "./models/v2_game/model_beating_1-1"  # to create a new model set it to ""
+MODEL_PATH = ""  # to create a new model set it to ""
 
 # training hyperparameters
 TRAIN_MODEL = True
@@ -117,7 +117,8 @@ for episode in range(1, NUM_EPOCHS):
 
             last_reward += reward
             reward_history.append(last_reward)
-            reward_mean_history.append(np.mean(reward_history))
+            if episode >= 100:
+                reward_mean_history.append(np.mean(reward_history))
             break
 
         if done and reward > 0:
@@ -126,7 +127,8 @@ for episode in range(1, NUM_EPOCHS):
 
             last_reward += 15
             reward_history.append(last_reward)
-            reward_mean_history.append(np.mean(reward_history))
+            if episode >= 100:
+                reward_mean_history.append(np.mean(reward_history))
             print("Finished the level")
             break
 
@@ -154,4 +156,3 @@ for episode in range(1, NUM_EPOCHS):
     del step_reward_history[:]
     step_reward_history = []
     step_log_prob_history = []
-
