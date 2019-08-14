@@ -22,13 +22,11 @@ class Agent:
     def select_action_based_on_state(self, state):
         """Returns the sampled action and the log of the probability density."""
         # get the probability distribution of the prediction
-        self.model.eval()
         pred_action_probs = self.model.forward(state)
         pred_action_dist = Categorical(pred_action_probs)
 
         # sample an action from the probability distribution
         action = pred_action_dist.sample()
-        self.model.train()
         return action.item(), pred_action_dist.log_prob(action)
 
     def update(self, log_prob_history, rewards):

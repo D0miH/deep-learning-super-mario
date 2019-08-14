@@ -26,7 +26,7 @@ MODEL_PATH = ""  # to create a new model set it to ""
 
 # training hyperparameters
 TRAIN_MODEL = True
-LEARNING_RATE = 0.000005
+LEARNING_RATE = 0.0000005
 NUM_EPOCHS = 1_000
 GAMMA = 0.99
 
@@ -91,7 +91,7 @@ if not TRAIN_MODEL:
     sys.exit()
 
 reward_history = []
-reward_mean_history = []
+reward_mean_history = [0]
 
 step_log_prob_history = []
 step_reward_history = []
