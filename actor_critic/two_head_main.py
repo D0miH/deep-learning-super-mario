@@ -139,6 +139,7 @@ for episode in range(1, NUM_EPOCHS):
         del state
         state = next_state
 
+    del state
     critic_loss, actor_loss = agent.update(trajectory)
 
     if episode % LOG_INTERVAL == 0:

@@ -26,7 +26,7 @@ MODEL_PATH = ""  # to create a new model set it to ""
 
 # training hyperparameters
 TRAIN_MODEL = True
-LEARNING_RATE = 0.00003
+LEARNING_RATE = 0.000007
 NUM_EPOCHS = 1_000
 GAMMA = 0.99
 
