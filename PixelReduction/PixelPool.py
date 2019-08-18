@@ -4,6 +4,7 @@ from gym_super_mario_bros.actions import RIGHT_ONLY
 import numpy as np
 from PIL import Image # Pillow
 from math import *
+import time
 
 class PixelConverter:
     def __init__(self):
@@ -55,35 +56,48 @@ def int_array_to_rgb(array):
     for x in array:
         yield [ colors[y % len(colors)] for y in x]
 
-def pooling(array):
-    result = np.empty([array.shape[0] // 16, array.shape[1] // 16], dtype=np.uint32)
-    for x in range(0, array.shape[0], 16):
-        for y in range(0, array.shape[1], 16):
-            area = array[x:(x + 16), y:(y + 16)]
+def getColor(area):
+    unique, counts = np.unique(np.nonzero(area.flatten()), return_counts=True)
+    #ind = np.argpartition(counts, -3)[-3:] # indices of 3 most frequent colors
+    #return unique[ind].mean(), len(unique)
+    return area.max()% 57, len(unique)
+
+
+def pooling(array, offset_x=0, offset_y=0, size=16):
+    result = np.empty([array.shape[0] // size, array.shape[1] // size], dtype=np.uint32)
+    for x in range(offset_x, array.shape[0], size):
+        for y in range(offset_y, array.shape[1], size):
+            area = array[x:(x + size), y:(y + size)]
             if (np.count_nonzero(area) > 64): # Quarter of it beeing non-black pixel
-                result[x // 16, y // 16] = np.max(area)
+                area_right = array[(x + size // 2):(x + size + size // 2), y:(y + size)]
+
+                area_color, area_count = getColor(area)
+                area_right_color, area_right_count = getColor(area_right)
+                result[x // size, y // size] = area_color if area_count <= area_right_count else area_right_color
             else:
-                result[x // 16, y // 16] = 0
+                result[x // size, y // size] = 0
     
     return result
         
 
 
 done = True
-for step in range(1000):
+for step in range(400):
     if done:
         state = env.reset()
     state, reward, done, info = env.step(env.action_space.sample())
     env.render()
+    # img = Image.fromarray(state)      # Create a PIL image
+    # img.save("C:\\Users\\Daniel\\Desktop\\Text2.png")                      # View in default viewer
     if (step % 20 == 0): 
         #state = rgb_array_to_int(state)
         #state = np.array(list(int_array_to_rgb(state)), dtype=np.uint8)
-        state = np.array(list(rgb_array_to_int(state)), dtype=np.uint8)
+        state = np.array(list(rgb_array_to_int(state)), dtype=np.uint32)
         state = state[32:] # Uppermost 32 pixels are only numbers
         state = pooling(state)
         print(state)
-        #img = Image.fromarray(state)      # Create a PIL image
-        #img.save("C:\\Users\\Daniel\\Desktop\\Text2.png")                      # View in default viewer
+        time.sleep(5)
+
     
 
 env.close()
