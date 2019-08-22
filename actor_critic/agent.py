@@ -1,118 +1,161 @@
 import torch
-from torch import optim
 from torch.distributions import Categorical
+
+from torch import optim
 from torch.functional import F
-import matplotlib.pyplot as plt
 
-from actor_critic.model import ActorNet, CriticNet
+from actor_critic.model import ActorNet, CriticNet, ActorCriticNet
 
+class TwoHeadAgent:
 
-class Agent:
-
-    def __init__(self, num_actions, frame_dim, gamma, beta, zeta, actor_lr, critic_lr, device):
-        self.device = device
+    def __init__(self, frame_dim, action_space_size, lr, gamma, entropy_scaling, device):
+        self.action_space_size = action_space_size
+        self.lr = lr
         self.gamma = gamma
-        self.beta = beta
-        self.zeta = zeta
+        self.device = device
+        self.entropy_scaling = entropy_scaling
 
-        self.actor_loss_history = []
-        self.critic_loss_history = []
-
-        self.actor_model = ActorNet(num_actions=num_actions, frame_dim=frame_dim).to(device)
-        self.actor_optimizer = optim.Adam(self.actor_model.parameters(), lr=actor_lr)
-
-        self.critic_model = CriticNet(frame_dim).to(device)
-        self.critic_optimizer = optim.Adam(self.critic_model.parameters(), lr=critic_lr)
+        self.model = ActorCriticNet(action_space_size, frame_dim).to(device)
+        self.optimizer = optim.Adam(self.model.parameters(), lr=lr)
 
     def get_action(self, state):
-        """Returns a sampled action from the actor network based on the given state."""
-        action_values = self.actor_model.forward(state)
-        action_distribution = F.softmax(action_values, dim=0)
-        probs = Categorical(action_distribution)
+        tensor_state = state.to(self.device)
 
-        return probs.sample().cpu().detach().item()
+        action_logits, _ = self.model.forward(tensor_state)
+        action_probs = F.softmax(action_logits, dim=-1)
+        dist = Categorical(action_probs)
+
+        return dist.sample().cpu().detach().item()
 
     def compute_critic_loss(self, trajectory):
-        states = torch.cat([transition[0] for transition in trajectory]).to(self.device)
-        rewards = [transition[1] for transition in trajectory]
+        states = [transition[0] for transition in trajectory]
+        rewards = [transition[2] for transition in trajectory]
+        dones = [transition[3] for transition in trajectory]
 
-        # discount the rewards
         discounted_rewards = []
         cumulative_reward = 0
-        for reward in reversed(rewards):
-            cumulative_reward = reward + self.gamma * cumulative_reward
+        for step in reversed(range(len(rewards))):
+            cumulative_reward = rewards[step] + self.gamma * cumulative_reward * (1 - int(dones[step]))
             discounted_rewards.insert(0, cumulative_reward)
-        discounted_rewards = torch.FloatTensor(discounted_rewards)
+        discounted_rewards = torch.FloatTensor(discounted_rewards).to(self.device)
 
-        value_targets = (torch.FloatTensor(rewards).view(-1, 1) + discounted_rewards.view(-1, 1)).to(self.device)
+        target_values = torch.FloatTensor(rewards).view(-1, 1).to(self.device) + discounted_rewards.view(-1, 1)
 
-        # get the predicted values
-        predicted_values = self.critic_model.forward(states)
+        states = torch.cat(states).to(self.device)
+        _, actual_values = self.model.forward(states)
 
-        value_loss = F.mse_loss(predicted_values, value_targets.detach()) * self.zeta
+        critic_loss = F.mse_loss(actual_values, target_values.view(-1, 1))
+        advantage = target_values - actual_values
 
-        advantages = value_targets - predicted_values
-
-        return value_loss, advantages.detach()
+        return critic_loss, advantage
 
     def compute_actor_loss(self, trajectory, advantages):
         states = torch.cat([transition[0] for transition in trajectory]).to(self.device)
-        actions = torch.IntTensor([transition[1] for transition in trajectory]).view(-1, 1).to(self.device)
+        actions = torch.FloatTensor([transition[1] for transition in trajectory]).to(self.device)
 
-        # get the predicted actions
-        predicted_action_values = self.actor_model.forward(states)
-        # get the distribution for each output
-        action_distribution = F.softmax(predicted_action_values, dim=1)
-        # convert to a categorical distribution to sample from it
-        probabilities = Categorical(action_distribution)
+        action_logits, _ = self.model.forward(states)
+        action_probs = F.softmax(action_logits, dim=1)
+        action_dists = Categorical(action_probs)
 
-        # calculate the entropy of the action distributions
-        entropy = []
-        for dist in action_distribution:
-            entropy.append(-torch.sum(dist.mean() * torch.log(dist)))
-        entropy = torch.stack(entropy).sum() * self.beta
+        # compute the entropy
+        entropy = action_dists.entropy().mean()
 
-        # compute the policy loss
-        policy_loss = probabilities.log_prob(actions.view(actions.size(0))).view(-1, 1) * advantages
-        policy_loss = -policy_loss.mean()
+        policy_loss = -action_dists.log_prob(actions).view(-1, 1) * advantages
+        policy_loss = policy_loss.mean()
 
-        total_policy_loss = policy_loss - entropy
-        return total_policy_loss
+        return policy_loss - self.entropy_scaling * entropy
 
     def update(self, trajectory):
-        """Updates the actor and critic based on the trajectory."""
-        critic_loss, advantages = self.compute_critic_loss(trajectory)
-        self.critic_loss_history.append(critic_loss)
-        # backprop for the critic
+        critic_loss, advantage = self.compute_critic_loss(trajectory)
+
+        actor_loss = self.compute_actor_loss(trajectory, advantage)
+
+        total_loss = critic_loss + actor_loss
+
+        self.optimizer.zero_grad()
+        total_loss.backward()
+        self.optimizer.step()
+
+        return actor_loss.cpu().detach(), critic_loss.cpu().detach()
+
+
+class TwoNetAgent:
+
+    def __init__(self, frame_dim, action_space_size, lr_actor, lr_critic, gamma, entropy_scaling, device):
+        self.action_space_size = action_space_size
+        self.lr_actor = lr_actor
+        self.lr_critic = lr_critic
+        self.gamma = gamma
+        self.device = device
+        self.entropy_scaling = entropy_scaling
+
+        # create the actor net
+        self.actor_model = ActorNet(action_space_size, frame_dim).to(device)
+        self.actor_optimizer = optim.Adam(self.actor_model.parameters(), lr=lr_actor)
+
+        # create the critic net
+        self.critic_model = CriticNet(action_space_size, frame_dim).to(device)
+        self.critic_optimizer = optim.Adam(self.critic_model.parameters(), lr=lr_critic)
+
+    def get_action(self, state):
+        tensor_state = state.to(self.device)
+
+        action_logits = self.actor_model.forward(tensor_state)
+        action_probs = F.softmax(action_logits, dim=-1)
+        dist = Categorical(action_probs)
+
+        return dist.sample().cpu().detach().item()
+
+    def compute_critic_loss(self, trajectory):
+        states = [transition[0] for transition in trajectory]
+        rewards = [transition[2] for transition in trajectory]
+        dones = [transition[3] for transition in trajectory]
+
+        discounted_rewards = []
+        cumulative_reward = 0
+        for step in reversed(range(len(rewards))):
+            cumulative_reward = rewards[step] + self.gamma * cumulative_reward * (1 - int(dones[step]))
+            discounted_rewards.insert(0, cumulative_reward)
+        discounted_rewards = torch.FloatTensor(discounted_rewards).to(self.device)
+
+        target_values = torch.FloatTensor(rewards).view(-1, 1).to(self.device) + discounted_rewards.view(-1, 1)
+
+        states = torch.cat(states).to(self.device)
+        actual_values = self.critic_model.forward(states)
+
+        critic_loss = F.mse_loss(actual_values, target_values.view(-1, 1))
+        advantage = target_values - actual_values
+
+        return critic_loss, advantage.detach()
+
+    def compute_actor_loss(self, trajectory, advantages):
+        states = torch.cat([transition[0] for transition in trajectory]).to(self.device)
+        actions = torch.FloatTensor([transition[1] for transition in trajectory]).to(self.device)
+
+        action_logits = self.actor_model.forward(states)
+        action_probs = F.softmax(action_logits, dim=1)
+        action_dists = Categorical(action_probs)
+
+        # compute the entropy
+        entropy = action_dists.entropy().mean()
+
+        policy_loss = -action_dists.log_prob(actions).view(-1, 1) * advantages
+        policy_loss = policy_loss.mean()
+
+        return policy_loss - self.entropy_scaling * entropy
+
+    def update(self, trajectory):
+        critic_loss, advantage = self.compute_critic_loss(trajectory)
         self.critic_optimizer.zero_grad()
         critic_loss.backward()
+        torch.nn.utils.clip_grad_norm_(self.actor_model.parameters(), 0.5)
         self.critic_optimizer.step()
-        critic_loss_value = critic_loss.item()
-        del critic_loss
 
-        actor_loss = self.compute_actor_loss(trajectory, advantages)
-        self.actor_loss_history.append(actor_loss)
-        # backprop for the actor
+        actor_loss = self.compute_actor_loss(trajectory, advantage)
         self.actor_optimizer.zero_grad()
         actor_loss.backward()
+        torch.nn.utils.clip_grad_norm_(self.critic_model.parameters(), 0.5)
         self.actor_optimizer.step()
-        actor_loss_value = actor_loss.item()
-        del actor_loss
 
-        return critic_loss_value, actor_loss_value
+        return actor_loss.cpu().detach(), critic_loss.cpu().detach()
 
-    def plot_loss(self):
-        actor_loss_history = torch.FloatTensor(self.actor_loss_history)
-        critic_loss_history = torch.FloatTensor(self.critic_loss_history)
-
-        plt.plot(actor_loss_history.numpy(), "y-")
-        plt.ylabel("Loss")
-        plt.xlabel("Episodes")
-        plt.title("Actor Loss")
-        plt.show()
-
-        plt.plot(critic_loss_history.numpy(), "m-")
-        plt.ylabel("Loss")
-        plt.xlabel("Episodes")
-        plt.title("Critic Loss")
-        plt.show()

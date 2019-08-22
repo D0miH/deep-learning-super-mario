@@ -1,33 +1,30 @@
 from itertools import count
+import torch
+import gym
+import numpy as np
+import matplotlib.pyplot as plt
 
 import gym_super_mario_bros
+from gym.wrappers import Monitor
 from gym_super_mario_bros.actions import SIMPLE_MOVEMENT, COMPLEX_MOVEMENT, RIGHT_ONLY
 from nes_py.wrappers import JoypadSpace
 
 from wrappers import wrapper
-from actor_critic.agent import Agent
+from actor_critic.agent import TwoNetAgent
 
-import matplotlib.pyplot as plt
-import numpy as np
-import torch
-
-# env settings
 LEVEL_NAME = "SuperMarioBros-v0"
-FRAME_DIM = (120, 128, 4)  # original image size is 240x256
-ACTION_SPACE = SIMPLE_MOVEMENT
+ACTION_SPACE = RIGHT_ONLY
+FRAME_DIM = (84, 110, 4)
+FRAME_SKIP = 4
+NUM_EPISODES = 20_000
+ACTOR_LEARNING_RATE = 0.000005
+CRITIC_LEARNING_RATE = 0.0003
+GAMMA = 0.99
+ENTROPY_SCALING = 0.001
+
 RENDER_GAME = True
-
-# training hyperparameters
-ACTOR_LEARNING_RATE = 0.00003
-CRITIC_LEARNING_RATE = 0.00003
-NUM_EPOCHS = 1000
-GAMMA = 0.99  # the discount factor
-BETA = 0.01  # the scaling of the entropy
-ZETA = 1  # the scaling of the value loss
-
-LOG_INTERVAL = 1
 PLOT_INTERVAL = 10
-
+VIDEO_INTERVAL = 1
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
@@ -35,91 +32,104 @@ def create_environment():
     """Creates the environment, applies some wrappers and returns it."""
     tmp_env = gym_super_mario_bros.make(LEVEL_NAME)
     tmp_env = JoypadSpace(tmp_env, ACTION_SPACE)
-    tmp_env = wrapper(tmp_env, FRAME_DIM)
+    tmp_env = wrapper(tmp_env, FRAME_DIM, FRAME_SKIP)
 
     return tmp_env
+
+
+def plot_reward_history(reward_history, mean_reward_history):
+    plt.plot(reward_history, "b-", mean_reward_history, "r-")
+    plt.ylabel("Rewards")
+    plt.xlabel("Episodes")
+    plt.show()
 
 
 def lazy_frame_to_tensor(lazy_frame):
     # pytorch expects the frames as height x width x depth
     return torch.from_numpy(
-        np.expand_dims(np.asarray(lazy_frame).astype(np.float64).transpose((2, 1, 0)), axis=0)).float().to(DEVICE)
+        np.expand_dims(np.asarray(lazy_frame).astype(np.float64).transpose((2, 1, 0)), axis=0)).float()
 
 
-def plot_rewards(reward_list, given_reward_mean_history):
-    plt.plot(reward_list, "b-", given_reward_mean_history, "r-")
-    plt.ylabel("Rewards")
-    plt.xlabel("Episodes")
-    plt.legend(["Reward per episode", "Average reward"])
-    plt.show()
+def record_one_episode(agent):
+    tmp_env = gym_super_mario_bros.make(LEVEL_NAME)
+    tmp_env = JoypadSpace(tmp_env, ACTION_SPACE)
+    tmp_env = Monitor(tmp_env, './video', force=True)
+    tmp_env = wrapper(tmp_env, FRAME_DIM, FRAME_SKIP)
 
+    state = lazy_frame_to_tensor(tmp_env.reset())
 
-env = create_environment()
-env.seed(42)
-torch.manual_seed(42)
-
-agent = Agent(env.action_space.n, FRAME_DIM, GAMMA, BETA, ZETA, ACTOR_LEARNING_RATE, CRITIC_LEARNING_RATE, DEVICE)
-
-reward_history = []
-reward_mean_history = [0]
-for episode in range(1, NUM_EPOCHS):
-    state = lazy_frame_to_tensor(env.reset())
-
-    episode_reward = 0
-    trajectory = []  # in here all the transitions are stored as [[state, action, reward, next_state, done],...]
-    for step in count(1):
-        # get the next action to perform
+    total_reward = 0
+    while True:
         action = agent.get_action(state)
 
-        # perform the action and get the feedback from the environment
-        next_state, reward, done, info = env.step(action)
+        next_state, reward, done, info = tmp_env.step(action)
         next_state = lazy_frame_to_tensor(next_state)
 
         if done:
-            if reward < 0:
-                # if we died append the negative reward
-                # the environment is doing some strange things here. We have to ensure that the last reward is negative.
-                trajectory.append([state, action, reward, next_state, done])
-
-            if reward > 0:
-                # if we reached the end of the level
-                trajectory.append([state, action, reward, next_state, done])
-                print("Finished level")
-
-            reward_history.append(episode_reward)
-            if episode >= 100:
-                reward_mean_history.append(np.mean(reward_history))
             break
 
-        trajectory.append([state, action, reward, next_state, done])
+        total_reward += reward
 
-        # update the reward of the episode
-        episode_reward += reward
-
-        # update the state and delete the previous one
         state = next_state
+
+
+env = create_environment()
+# set all options for reproducability
+env.seed(42)
+torch.manual_seed(42)
+torch.cuda.manual_seed(42)
+torch.backends.cudnn.deterministic = True
+torch.backends.cudnn.benchmark = False
+
+agent = TwoNetAgent(FRAME_DIM, env.action_space.n, ACTOR_LEARNING_RATE, CRITIC_LEARNING_RATE, GAMMA, ENTROPY_SCALING,
+                    DEVICE)
+
+record_one_episode(agent)
+
+reward_history = []
+mean_reward_history = [0]
+for episode in range(1, NUM_EPISODES):
+
+    # reset the environment before a new episode
+    state = env.reset()
+    state = lazy_frame_to_tensor(state)
+
+    trajectory = []
+    total_episode_reward = 0
+    for step in count(1):
+        # get the next action
+        action = agent.get_action(state)
+        # preform the action
+        next_state, reward, done, info = env.step(action)
+        next_state = lazy_frame_to_tensor(next_state)
+
+        # add the transition to the trajectory
+        trajectory.append([state, action, reward, done])
+
+        # keep track of the total reward
+        total_episode_reward += reward
+
+        if done:
+            reward_history.append(total_episode_reward)
+            if episode > 100:
+                mean_reward_history.append(np.mean(reward_history[-100:]))
+            break
 
         if RENDER_GAME:
             env.render()
 
-        if done:
-            reward_history.append(episode_reward)
-            reward_mean_history.append(np.mean(reward_history))
-            break
+        del state
+        state = next_state
 
-    # update the agent based on the trajectory
-    critic_loss, actor_loss = agent.update(trajectory)
-    # delete the trajectory to save memory
-    del trajectory
+    # update the model using the trajectory
+    actor_loss, critic_loss = agent.update(trajectory)
 
-    # log some info
-    if episode % LOG_INTERVAL == 0:
-        print("Episode {}\tReward: {:.2f}\tAverage reward: {:.2f}\tActor Loss: {:.2f}\tCritic Loss: {:.2f}".format(
-            episode, episode_reward,
-            reward_mean_history[-1], actor_loss, critic_loss))
-    del critic_loss, actor_loss
+    print("Episode: {}\t Reward: {:.2f}\t AverageReward: {:.2f}\t Actor Loss: {:.2f}\t Critic Loss: {:.2f}".format(
+        episode, total_episode_reward, mean_reward_history[-1], actor_loss, critic_loss))
+
     if episode % PLOT_INTERVAL == 0:
-        plot_rewards(reward_history, reward_mean_history)
-        agent.plot_loss()
+        plot_reward_history(reward_history, mean_reward_history)
+    if episode % VIDEO_INTERVAL == 0:
+        record_one_episode(agent)
 
-    torch.cuda.empty_cache()
+env.close()
