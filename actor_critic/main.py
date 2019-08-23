@@ -1,6 +1,5 @@
 from itertools import count
 import torch
-import gym
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -10,21 +9,27 @@ from gym_super_mario_bros.actions import SIMPLE_MOVEMENT, COMPLEX_MOVEMENT, RIGH
 from nes_py.wrappers import JoypadSpace
 
 from wrappers import wrapper
-from actor_critic.agent import TwoNetAgent
+from actor_critic.agent import TwoNetAgent, TwoHeadAgent
 
-LEVEL_NAME = "SuperMarioBros-v0"
+WORLD = 1
+STAGE = 1
+LEVEL_NAME = "SuperMarioBros-{}-{}-v0".format(WORLD, STAGE)
 ACTION_SPACE = RIGHT_ONLY
 FRAME_DIM = (84, 110, 4)
 FRAME_SKIP = 4
 NUM_EPISODES = 20_000
-ACTOR_LEARNING_RATE = 0.000005
-CRITIC_LEARNING_RATE = 0.0003
+LEARNING_RATE = 0.000003
+# ACTOR_LEARNING_RATE = 0.000005
+# CRITIC_LEARNING_RATE = 0.0003
 GAMMA = 0.99
-ENTROPY_SCALING = 0.001
+ENTROPY_SCALING = 1
 
 RENDER_GAME = True
 PLOT_INTERVAL = 10
-VIDEO_INTERVAL = 1
+VIDEO_INTERVAL = 50
+CHECKPOINT_INTERVAL = 1
+MODEL_PATH = "./models/actor_critic_two_head_world1-1"
+LOAD_MODEL = True
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
@@ -77,14 +82,14 @@ env = create_environment()
 # set all options for reproducability
 env.seed(42)
 torch.manual_seed(42)
-torch.cuda.manual_seed(42)
+torch.cuda.manual_seed(1)
 torch.backends.cudnn.deterministic = True
 torch.backends.cudnn.benchmark = False
 
-agent = TwoNetAgent(FRAME_DIM, env.action_space.n, ACTOR_LEARNING_RATE, CRITIC_LEARNING_RATE, GAMMA, ENTROPY_SCALING,
-                    DEVICE)
-
-record_one_episode(agent)
+agent = TwoHeadAgent(FRAME_DIM, env.action_space.n, LEARNING_RATE, GAMMA, ENTROPY_SCALING,
+                     DEVICE)
+if LOAD_MODEL:
+    agent.load_model(MODEL_PATH)
 
 reward_history = []
 mean_reward_history = [0]
@@ -110,9 +115,11 @@ for episode in range(1, NUM_EPISODES):
         total_episode_reward += reward
 
         if done:
+            if info["flag_get"]:
+                print("Finished Level")
             reward_history.append(total_episode_reward)
-            if episode > 100:
-                mean_reward_history.append(np.mean(reward_history[-100:]))
+            if episode > 200:
+                mean_reward_history.append(np.mean(reward_history[-200:]))
             break
 
         if RENDER_GAME:
@@ -124,12 +131,14 @@ for episode in range(1, NUM_EPISODES):
     # update the model using the trajectory
     actor_loss, critic_loss = agent.update(trajectory)
 
-    print("Episode: {}\t Reward: {:.2f}\t AverageReward: {:.2f}\t Actor Loss: {:.2f}\t Critic Loss: {:.2f}".format(
+    print("Episode: {}\t Reward: {:.2f}\t AverageReward: {:.2f}\t Actor Loss: {:.5f}\t Critic Loss: {:.5f}".format(
         episode, total_episode_reward, mean_reward_history[-1], actor_loss, critic_loss))
 
     if episode % PLOT_INTERVAL == 0:
         plot_reward_history(reward_history, mean_reward_history)
     if episode % VIDEO_INTERVAL == 0:
         record_one_episode(agent)
+    if episode % CHECKPOINT_INTERVAL == 0:
+        agent.save_model(MODEL_PATH)
 
 env.close()

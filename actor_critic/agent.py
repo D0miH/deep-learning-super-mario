@@ -6,6 +6,7 @@ from torch.functional import F
 
 from actor_critic.model import ActorNet, CriticNet, ActorCriticNet
 
+
 class TwoHeadAgent:
 
     def __init__(self, frame_dim, action_space_size, lr, gamma, entropy_scaling, device):
@@ -44,10 +45,10 @@ class TwoHeadAgent:
         states = torch.cat(states).to(self.device)
         _, actual_values = self.model.forward(states)
 
-        critic_loss = F.mse_loss(actual_values, target_values.view(-1, 1))
+        critic_loss = F.l1_loss(actual_values, target_values.view(-1, 1))
         advantage = target_values - actual_values
 
-        return critic_loss, advantage
+        return critic_loss, advantage.detach()
 
     def compute_actor_loss(self, trajectory, advantages):
         states = torch.cat([transition[0] for transition in trajectory]).to(self.device)
@@ -77,6 +78,13 @@ class TwoHeadAgent:
         self.optimizer.step()
 
         return actor_loss.cpu().detach(), critic_loss.cpu().detach()
+
+    def load_model(self, path):
+        self.model.load_state_dict(torch.load(path))
+        self.optimizer = optim.Adam(self.model.parameters(), lr=self.lr)
+
+    def save_model(self, path):
+        torch.save(self.model.state_dict(), path)
 
 
 class TwoNetAgent:
@@ -123,7 +131,7 @@ class TwoNetAgent:
         states = torch.cat(states).to(self.device)
         actual_values = self.critic_model.forward(states)
 
-        critic_loss = F.mse_loss(actual_values, target_values.view(-1, 1))
+        critic_loss = F.l1_loss(actual_values, target_values.view(-1, 1))
         advantage = target_values - actual_values
 
         return critic_loss, advantage.detach()
@@ -148,14 +156,24 @@ class TwoNetAgent:
         critic_loss, advantage = self.compute_critic_loss(trajectory)
         self.critic_optimizer.zero_grad()
         critic_loss.backward()
-        torch.nn.utils.clip_grad_norm_(self.actor_model.parameters(), 0.5)
+        torch.nn.utils.clip_grad_norm_(self.critic_model.parameters(), 1)
         self.critic_optimizer.step()
 
         actor_loss = self.compute_actor_loss(trajectory, advantage)
         self.actor_optimizer.zero_grad()
         actor_loss.backward()
-        torch.nn.utils.clip_grad_norm_(self.critic_model.parameters(), 0.5)
+        torch.nn.utils.clip_grad_norm_(self.actor_model.parameters(), 0.25)
         self.actor_optimizer.step()
 
         return actor_loss.cpu().detach(), critic_loss.cpu().detach()
 
+    def save_model(self, actor_model_path, critic_model_path):
+        torch.save(self.actor_model.state_dict(), actor_model_path)
+        torch.save(self.critic_model.state_dict(), critic_model_path)
+
+    def load_model(self, actor_model_path, critic_model_path):
+        self.actor_model.load_state_dict(torch.load(actor_model_path))
+        self.actor_optimizer = optim.Adam(self.actor_model.parameters(), lr=self.lr_actor)
+
+        self.critic_model.load_state_dict(torch.load(critic_model_path))
+        self.critic_optimizer = optim.Adam(self.critic_model.parameters(), lr=self.lr_critic)
