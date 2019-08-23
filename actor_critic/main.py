@@ -15,21 +15,21 @@ WORLD = 1
 STAGE = 1
 LEVEL_NAME = "SuperMarioBros-{}-{}-v0".format(WORLD, STAGE)
 ACTION_SPACE = RIGHT_ONLY
-FRAME_DIM = (84, 110, 4)
+FRAME_DIM = (84, 84, 4)
 FRAME_SKIP = 4
 NUM_EPISODES = 20_000
-LEARNING_RATE = 0.000003
+LEARNING_RATE = 0.000005
 # ACTOR_LEARNING_RATE = 0.000005
 # CRITIC_LEARNING_RATE = 0.0003
 GAMMA = 0.99
-ENTROPY_SCALING = 1
+ENTROPY_SCALING = 0.01
 
 RENDER_GAME = True
 PLOT_INTERVAL = 10
 VIDEO_INTERVAL = 50
-CHECKPOINT_INTERVAL = 1
+CHECKPOINT_INTERVAL = 100
 MODEL_PATH = "./models/actor_critic_two_head_world1-1"
-LOAD_MODEL = True
+LOAD_MODEL = False
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
@@ -55,10 +55,10 @@ def lazy_frame_to_tensor(lazy_frame):
         np.expand_dims(np.asarray(lazy_frame).astype(np.float64).transpose((2, 1, 0)), axis=0)).float()
 
 
-def record_one_episode(agent):
+def record_one_episode(agent, episode):
     tmp_env = gym_super_mario_bros.make(LEVEL_NAME)
     tmp_env = JoypadSpace(tmp_env, ACTION_SPACE)
-    tmp_env = Monitor(tmp_env, './video', force=True)
+    tmp_env = Monitor(tmp_env, './videos/video-episode-{}'.format(episode), force=True)
     tmp_env = wrapper(tmp_env, FRAME_DIM, FRAME_SKIP)
 
     state = lazy_frame_to_tensor(tmp_env.reset())
@@ -82,7 +82,7 @@ env = create_environment()
 # set all options for reproducability
 env.seed(42)
 torch.manual_seed(42)
-torch.cuda.manual_seed(1)
+torch.cuda.manual_seed(42)
 torch.backends.cudnn.deterministic = True
 torch.backends.cudnn.benchmark = False
 
@@ -90,6 +90,8 @@ agent = TwoHeadAgent(FRAME_DIM, env.action_space.n, LEARNING_RATE, GAMMA, ENTROP
                      DEVICE)
 if LOAD_MODEL:
     agent.load_model(MODEL_PATH)
+
+record_one_episode(agent, 1)
 
 reward_history = []
 mean_reward_history = [0]
@@ -137,7 +139,7 @@ for episode in range(1, NUM_EPISODES):
     if episode % PLOT_INTERVAL == 0:
         plot_reward_history(reward_history, mean_reward_history)
     if episode % VIDEO_INTERVAL == 0:
-        record_one_episode(agent)
+        record_one_episode(agent, episode)
     if episode % CHECKPOINT_INTERVAL == 0:
         agent.save_model(MODEL_PATH)
 

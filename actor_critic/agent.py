@@ -59,7 +59,7 @@ class TwoHeadAgent:
         action_dists = Categorical(action_probs)
 
         # compute the entropy
-        entropy = action_dists.entropy().mean()
+        entropy = action_dists.entropy().sum()
 
         policy_loss = -action_dists.log_prob(actions).view(-1, 1) * advantages
         policy_loss = policy_loss.mean()
@@ -72,6 +72,8 @@ class TwoHeadAgent:
         actor_loss = self.compute_actor_loss(trajectory, advantage)
 
         total_loss = critic_loss + actor_loss
+
+        torch.cuda.empty_cache()
 
         self.optimizer.zero_grad()
         total_loss.backward()
