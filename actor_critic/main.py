@@ -103,12 +103,17 @@ for episode in range(1, NUM_EPISODES):
 
     trajectory = []
     total_episode_reward = 0
+    total_episode_score = 0
     for step in count(1):
         # get the next action
         action = agent.get_action(state)
         # preform the action
         next_state, reward, done, info = env.step(action)
         next_state = lazy_frame_to_tensor(next_state)
+
+        # add the score to the reward. 1 reward for 100 points
+        score_delta = (info["score"] - total_episode_score)
+        reward += (score_delta / 100)
 
         # add the transition to the trajectory
         trajectory.append([state, action, reward, done])
