@@ -147,7 +147,7 @@ class TwoNetAgent:
         action_dists = Categorical(action_probs)
 
         # compute the entropy
-        entropy = action_dists.entropy().mean()
+        entropy = action_dists.entropy().sum()
 
         policy_loss = -action_dists.log_prob(actions).view(-1, 1) * advantages
         policy_loss = policy_loss.mean()
@@ -155,16 +155,18 @@ class TwoNetAgent:
         return policy_loss - self.entropy_scaling * entropy
 
     def update(self, trajectory):
+        torch.cuda.empty_cache()
+
         critic_loss, advantage = self.compute_critic_loss(trajectory)
         self.critic_optimizer.zero_grad()
         critic_loss.backward()
-        torch.nn.utils.clip_grad_norm_(self.critic_model.parameters(), 1)
         self.critic_optimizer.step()
+
+        torch.cuda.empty_cache()
 
         actor_loss = self.compute_actor_loss(trajectory, advantage)
         self.actor_optimizer.zero_grad()
         actor_loss.backward()
-        torch.nn.utils.clip_grad_norm_(self.actor_model.parameters(), 0.25)
         self.actor_optimizer.step()
 
         return actor_loss.cpu().detach(), critic_loss.cpu().detach()

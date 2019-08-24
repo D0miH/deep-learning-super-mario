@@ -14,21 +14,23 @@ from actor_critic.agent import TwoNetAgent, TwoHeadAgent
 WORLD = 1
 STAGE = 1
 LEVEL_NAME = "SuperMarioBros-{}-{}-v0".format(WORLD, STAGE)
-ACTION_SPACE = RIGHT_ONLY
+ACTION_SPACE = SIMPLE_MOVEMENT
 FRAME_DIM = (84, 84, 4)
 FRAME_SKIP = 4
 NUM_EPISODES = 20_000
-LEARNING_RATE = 0.000005
-# ACTOR_LEARNING_RATE = 0.000005
-# CRITIC_LEARNING_RATE = 0.0003
+# LEARNING_RATE = 0.00003
+ACTOR_LEARNING_RATE = 0.000005
+CRITIC_LEARNING_RATE = 0.000007
 GAMMA = 0.99
 ENTROPY_SCALING = 0.01
 
 RENDER_GAME = True
-PLOT_INTERVAL = 10
-VIDEO_INTERVAL = 50
+PLOT_INTERVAL = 50
+VIDEO_INTERVAL = 100
 CHECKPOINT_INTERVAL = 100
-MODEL_PATH = "./models/actor_critic_two_head_world1-1"
+#MODEL_PATH = "./models/actor_critic_two_head_world1-1"
+ACTOR_MODEL_PATH = "./models/actor_model_world1-1"
+CRITIC_MODEL_PATH = "./models/critic_model_wordl1-1"
 LOAD_MODEL = False
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -58,7 +60,7 @@ def lazy_frame_to_tensor(lazy_frame):
 def record_one_episode(agent, episode):
     tmp_env = gym_super_mario_bros.make(LEVEL_NAME)
     tmp_env = JoypadSpace(tmp_env, ACTION_SPACE)
-    tmp_env = Monitor(tmp_env, './videos/video-episode-{}'.format(episode), force=True)
+    tmp_env = Monitor(tmp_env, './videos/video-episode-{0:05d}'.format(episode), force=True)
     tmp_env = wrapper(tmp_env, FRAME_DIM, FRAME_SKIP)
 
     state = lazy_frame_to_tensor(tmp_env.reset())
@@ -86,10 +88,11 @@ torch.cuda.manual_seed(42)
 torch.backends.cudnn.deterministic = True
 torch.backends.cudnn.benchmark = False
 
-agent = TwoHeadAgent(FRAME_DIM, env.action_space.n, LEARNING_RATE, GAMMA, ENTROPY_SCALING,
-                     DEVICE)
+agent = TwoNetAgent(frame_dim=FRAME_DIM, action_space_size=env.action_space.n, lr_actor=ACTOR_LEARNING_RATE,
+                    lr_critic=CRITIC_LEARNING_RATE, gamma=GAMMA, entropy_scaling=ENTROPY_SCALING,
+                    device=DEVICE)
 if LOAD_MODEL:
-    agent.load_model(MODEL_PATH)
+    agent.load_model(actor_model_path=ACTOR_MODEL_PATH, critic_model_path=CRITIC_MODEL_PATH)
 
 record_one_episode(agent, 1)
 
@@ -113,6 +116,7 @@ for episode in range(1, NUM_EPISODES):
 
         # add the score to the reward. 1 reward for 100 points
         score_delta = (info["score"] - total_episode_score)
+        total_episode_score += score_delta
         reward += (score_delta / 100)
 
         # add the transition to the trajectory
@@ -146,6 +150,6 @@ for episode in range(1, NUM_EPISODES):
     if episode % VIDEO_INTERVAL == 0:
         record_one_episode(agent, episode)
     if episode % CHECKPOINT_INTERVAL == 0:
-        agent.save_model(MODEL_PATH)
+        agent.save_model(actor_model_path=ACTOR_MODEL_PATH, critic_model_path=CRITIC_MODEL_PATH)
 
 env.close()
