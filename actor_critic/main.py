@@ -12,25 +12,25 @@ from wrappers import wrapper
 from actor_critic.agent import TwoNetAgent, TwoHeadAgent
 
 WORLD = 1
-STAGE = 1
-LEVEL_NAME = "SuperMarioBros-{}-{}-v0".format(WORLD, STAGE)
-ACTION_SPACE = SIMPLE_MOVEMENT
+STAGE = 2
+LEVEL_NAME = "SuperMarioBros-{}-{}-v1".format(WORLD, STAGE)
+ACTION_SPACE = COMPLEX_MOVEMENT
 FRAME_DIM = (84, 84, 4)
 FRAME_SKIP = 4
 NUM_EPISODES = 20_000
 # LEARNING_RATE = 0.00003
-ACTOR_LEARNING_RATE = 0.000005
-CRITIC_LEARNING_RATE = 0.000007
+ACTOR_LEARNING_RATE = 0.00005
+CRITIC_LEARNING_RATE = 0.0005
 GAMMA = 0.99
-ENTROPY_SCALING = 0.01
+ENTROPY_SCALING = 0.1
 
 RENDER_GAME = True
 PLOT_INTERVAL = 50
 VIDEO_INTERVAL = 100
 CHECKPOINT_INTERVAL = 100
 #MODEL_PATH = "./models/actor_critic_two_head_world1-1"
-ACTOR_MODEL_PATH = "./models/actor_model_world1-1"
-CRITIC_MODEL_PATH = "./models/critic_model_wordl1-1"
+ACTOR_MODEL_PATH = "./models/actor_model_world1-2"
+CRITIC_MODEL_PATH = "./models/critic_model_wordl1-2"
 LOAD_MODEL = False
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -94,7 +94,7 @@ agent = TwoNetAgent(frame_dim=FRAME_DIM, action_space_size=env.action_space.n, l
 if LOAD_MODEL:
     agent.load_model(actor_model_path=ACTOR_MODEL_PATH, critic_model_path=CRITIC_MODEL_PATH)
 
-record_one_episode(agent, 1)
+#record_one_episode(agent, 1)
 
 reward_history = []
 mean_reward_history = [0]
@@ -114,10 +114,13 @@ for episode in range(1, NUM_EPISODES):
         next_state, reward, done, info = env.step(action)
         next_state = lazy_frame_to_tensor(next_state)
 
-        # add the score to the reward. 1 reward for 100 points
+        # add the score to the reward. 4 reward for 100 points
         score_delta = (info["score"] - total_episode_score)
         total_episode_score += score_delta
-        reward += (score_delta / 100)
+        reward += (score_delta / 25)
+        # if mario got a mushroom or a flower increase the score even more
+        if info["status"] == "tall" or info["status"] == "fireball":
+            reward += 2
 
         # add the transition to the trajectory
         trajectory.append([state, action, reward, done])
