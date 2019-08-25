@@ -34,18 +34,21 @@ class NeuralMario(nn.Module):
                         Flatten(),
                         nn.Linear(4704, action_count, bias=True),
                         nn.Softmax(dim=1)
-                        #nn.Conv2d(4, 8, 5, bias=True),
+                        #Colab
+                        #nn.Conv2d(4, 4, 5, bias=True),
                         #nn.ReLU(inplace=True),
-                        #nn.Conv2d(8, 6, 3, bias=True),
+                        #nn.Conv2d(4, 4, 3, stride=2, bias=True),
                         #nn.ReLU(inplace=True),
-                        #nn.Conv2d(6, 4, 3, bias=True),
+                        #nn.Conv2d(4, 3, 3, bias=True),
                         #nn.ReLU(inplace=True),
-                        #nn.Conv2d(4, 4, 1, bias=True),
+                        #nn.Conv2d(3, 3, 3, bias=True),
+                        #nn.ReLU(inplace=True),
+                        #nn.Conv2d(4, 2, 3, stride=2, bias=True),
                         #nn.ReLU(inplace=True),
                         #Flatten(),
-                        #nn.Linear(7056, 128, bias=True),
-                        #nn.ReLU(),
-                        #nn.Linear(128, action_count),
+                        #nn.Linear(128, 64, bias=True),
+                        #nn.ReLU(inplace=True),
+                        #nn.Linear(64, action_count, bias=True),
                         #nn.Softmax(dim=1)
                         )
 
