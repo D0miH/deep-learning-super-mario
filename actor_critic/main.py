@@ -22,16 +22,16 @@ NUM_EPISODES = 20_000
 ACTOR_LEARNING_RATE = 0.00005
 CRITIC_LEARNING_RATE = 0.0005
 GAMMA = 0.99
-ENTROPY_SCALING = 0.1
+ENTROPY_SCALING = 0.01
 
 RENDER_GAME = True
 PLOT_INTERVAL = 50
-VIDEO_INTERVAL = 100
+VIDEO_INTERVAL = 1
 CHECKPOINT_INTERVAL = 100
 #MODEL_PATH = "./models/actor_critic_two_head_world1-1"
 ACTOR_MODEL_PATH = "./models/actor_model_world1-2"
-CRITIC_MODEL_PATH = "./models/critic_model_wordl1-2"
-LOAD_MODEL = False
+CRITIC_MODEL_PATH = "./models/critic_model_world1-2"
+LOAD_MODEL = True
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
@@ -117,10 +117,7 @@ for episode in range(1, NUM_EPISODES):
         # add the score to the reward. 4 reward for 100 points
         score_delta = (info["score"] - total_episode_score)
         total_episode_score += score_delta
-        reward += (score_delta / 25)
-        # if mario got a mushroom or a flower increase the score even more
-        if info["status"] == "tall" or info["status"] == "fireball":
-            reward += 2
+        reward += (score_delta / 5)
 
         # add the transition to the trajectory
         trajectory.append([state, action, reward, done])
